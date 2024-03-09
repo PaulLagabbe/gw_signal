@@ -1,5 +1,5 @@
 [package]
-name = "signal"
+name = "gw_signal"
 version = "0.1.0"
 edition = "2021"
 description = "Package with signal processing tools for graviational waves studies"
