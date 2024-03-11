@@ -16,12 +16,13 @@ use crate::{
 	timeseries::TimeSeries,
 	frequencyseries::FrequencySeries,
 	filters::Filter,
+	windows::Window,
 };
 use rustfft::{
 	FftPlanner,
 	num_complex::Complex
 };
-use more_asserts as ma;
+//use more_asserts as ma;
 
 
 
@@ -32,36 +33,6 @@ use more_asserts as ma;
 impl TimeSeries {
 
 	
-	/// Spectral analysis methods:
-	/// These methods use the Welch's method to compute the Cross Spectral Density,
-	/// and all the other methods call the cross spectral density method. 
-	///
-	/// Complute one fft without normalization this function is meant to be used by the other methods of time series
-	/// Return a frequency series.
-	pub fn one_fft(&self, 
-		window_start: usize, window_size: usize,
-		window_func: fn(usize, usize) -> f64) -> FrequencySeries {
-		
-		// check if the window is included in the time series
-		ma::assert_ge!(self.get_size(), window_start + window_size);
-		// initialize fft
-		let mut planner = FftPlanner::new();
-		let fft = planner.plan_fft_forward(window_size);
-
-		// initialize output vector
-		let mut output_data: Vec<Complex<f64>> = Vec::new();
-		for i in 0..window_size {
-			output_data.push(Complex{ re: self[i+window_start] * window_func(i, window_size),
-									  im: 0. });
-		}
-		
-		// compute fft
-		fft.process(&mut output_data);
-
-		// make frequency series
-		FrequencySeries::from_vector(self.get_fs() / 2., output_data[0..(window_size/2+1)].to_vec())
-	}
-
 	/// Compute the cross spectal density between two signals, using the Welch's method
 	/// 
 	/// # Example
@@ -79,51 +50,47 @@ impl TimeSeries {
 	/// let csv: fs::FrequencySeries = signal_1.csd(signal_2, 1., 0.5, win::hann);
 	/// 
 	/// ```
- 
 	pub fn csd(
 		&self,
 		other: &TimeSeries,
-		delta_w: f64,
-		delta_o: f64,
-		window: fn(usize, usize) -> f64) -> FrequencySeries {
+		window: &Window) -> FrequencySeries {
 	
-		// compute the size of the window
-		let mut window_start: usize = 0;
-		let window_size: usize = (delta_w * self.get_fs()).round() as usize;
-		let overlap_size: usize = (delta_o * self.get_fs()).round() as usize;
-		let mut nb_fft: usize = 0;
-		
-		// initialize output frequency series
+		// initialize fft
+		let mut planner = FftPlanner::new();
+		let fft = planner.plan_fft_forward(window.get_size());
+
+		// initialize frequency series
+		let mut temp_1: Vec<Complex<f64>>;
+		let mut temp_2: Vec<Complex<f64>>;
+		let f_max: f64 = self.get_fs() / 2.;
 		let mut output: &mut FrequencySeries = &mut FrequencySeries::from_vector(
-			self.get_fs() / 2.,
-			vec![Complex{ re: 0.0f64, im: 0.0f64 }; window_size / 2 + 1]);
-
-		let mut temp_1: FrequencySeries;
-		let mut temp_2: FrequencySeries;
-
-		// compute ffts while the end of the window does not pass the end of the time series
-		while self.get_size() >= (window_start + window_size) {
-			
-			temp_1 = self.one_fft(window_start, window_size, window);
-			temp_2 = other.one_fft(window_start, window_size, window);
-
-			output = output + &*( &mut temp_1.clone().conj() * &temp_2 );
-			
-			// compute new window starting index
-			window_start += window_size - overlap_size;
-			nb_fft += 1;
-		}
-		output = output / nb_fft as f64;
+			f_max, vec![Complex{ re: 0.0f64, im: 0.0f64 }; window.get_size() / 2 + 1]);
 		
-		// compute window normalization factor
-		let mut alpha: f64 = 0.;
-		for i in 0..window_size {
-			alpha += window(i, window_size).powi(2);
-		};
-		output = output * (2. / self.get_fs() / alpha);
+		let nb_fft: usize = window.nb_fft(self.get_size());
+		for i in 0..nb_fft {
+			// compute windowed data
+			temp_1 = window.get_windowed_data(self.get_data(), i);
+			temp_2 = window.get_windowed_data(other.get_data(), i);
+			// compute fft
+			fft.process(&mut temp_1); fft.process(&mut temp_2);
+			// compute product
+			output = output + &*(
+				&mut FrequencySeries::from_vector(
+					f_max, 
+					temp_1[0..(window.get_size() / 2 + 1)].to_vec().clone()
+				).conj()
+				* &FrequencySeries::from_vector(
+					f_max,
+					temp_2[0..(window.get_size() / 2 + 1)].to_vec().clone()
+				)
+			);
+
+		}
+
+		output = output / (f_max * window.get_norm_factor() * nb_fft as f64);
 		output.clone()
+
 	}
-	
 	/// Compute power spectral density using cross spectral density with itself
 	/// 
 	/// # Example
@@ -143,13 +110,11 @@ impl TimeSeries {
 
 	pub fn psd(
 		&self,
-		delta_w: f64,
-		delta_o: f64,
-		window: fn(usize, usize) -> f64) -> FrequencySeries {
+		window: &Window) -> FrequencySeries {
 
 		// use csd
 		let self_copy: &TimeSeries = &(self.clone());
-		self.csd(&self_copy, delta_w, delta_o, window)
+		self.csd(&self_copy, window)
 	}
 	
 	/// Compute the amplitude spectral density of a signal. Uses the psd function
@@ -171,11 +136,9 @@ impl TimeSeries {
 
 	pub fn asd(
 		&self,
-		delta_w: f64,
-		delta_o: f64,
-		window: fn(usize, usize) -> f64) -> FrequencySeries {
+		window: &Window) -> FrequencySeries {
 		
-		self.psd(delta_w, delta_o, window).sqrt()
+		self.psd(window).sqrt()
 	}
 
 	/// Compute the coherence between two signals.
@@ -199,13 +162,11 @@ impl TimeSeries {
 	pub fn coherence(
 		&self,
 		other: &TimeSeries,
-		delta_w: f64,
-		delta_o: f64,
-		window: fn(usize, usize) -> f64) -> FrequencySeries {
+		window: &Window) -> FrequencySeries {
 
-		let psd1: FrequencySeries = self.clone().psd(delta_w, delta_o, window);
-		let psd2: FrequencySeries = other.clone().psd(delta_w, delta_o, window);
-		let mut csd: FrequencySeries = self.csd(other, delta_w, delta_o, window).abs2();
+		let psd1: FrequencySeries = self.clone().psd(window);
+		let psd2: FrequencySeries = other.clone().psd(window);
+		let mut csd: FrequencySeries = self.csd(other, window).abs2();
 		((&mut csd / &psd1) / &psd2).clone()
 	}
 
@@ -230,12 +191,10 @@ impl TimeSeries {
 	pub fn transfer_function(
 		&self,
 		other: &TimeSeries,
-		delta_w: f64,
-		delta_o: f64,
-		window: fn(usize, usize) -> f64) -> FrequencySeries {
+		window: &Window) -> FrequencySeries {
 
-		let psd: FrequencySeries = self.clone().psd(delta_w, delta_o, window);
-		let mut csd: FrequencySeries = self.csd(other, delta_w, delta_o, window);
+		let psd: FrequencySeries = self.clone().psd(window);
+		let mut csd: FrequencySeries = self.csd(other, window);
 		(&mut csd / &psd).clone()
 	}
 
