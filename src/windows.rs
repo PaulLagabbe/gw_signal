@@ -5,7 +5,27 @@
 use rustfft::num_complex::Complex;
 use std::f64::consts::PI;
 
-/// Window object iterable
+/// Window object, to be used to compute the Fourrier transform of a signal
+/// 
+/// # Example
+/// 
+/// ```
+/// // libraries
+/// use gw_signal::{
+///		timeseries as ts,
+/// 	frequencyseries as fs,
+/// 	window as win,
+/// }
+/// // sampling frequency in Hz
+/// let frequency: f64 = 1e3; 
+/// // define hann window of 1 sec duration overlapping over 0.5 sec.
+/// let hann_window: win::Window = win::Window::hann(1., 0.5, frequency);
+/// // generate noise signal with 20000 samples, with an ampliture of 0.1.
+/// let signal: ts::TimeSeries::white_noise(20000, frequency, 0.1);
+///
+/// // compute power spectral density
+/// let response = signal.psd(&hann_window);
+/// ```
 #[derive(Clone)]
 pub struct Window {
 	overlap: usize,
@@ -23,7 +43,7 @@ impl Window {
 		assert!(size > overlap);
 		// make window vector
 		let mut vector: Vec<f64> = Vec::new();
-		for i in 0..size {
+		for _i in 0..size {
 			vector.push(1.);
 		}
 		Window {
@@ -44,6 +64,66 @@ impl Window {
 		for i in 0..size {
 			phi =  2. * PI * (i as f64) / (size as f64);
 			vector.push(0.5 * (1. - phi.cos()));
+		}
+
+		Window {
+			overlap,
+			vector,
+		}
+
+	}
+	/// constructor method, create a Blackman window object
+	pub fn blackman(duration: f64, overlap_time: f64, fs: f64) -> Self {
+
+		let size: usize = (duration * fs).round() as usize;
+		let overlap: usize = (overlap_time * fs).round() as usize;
+		assert!(size > overlap);
+		// make window vector
+		let mut vector: Vec<f64> = Vec::new();
+		let mut phi: f64;
+		for i in 0..size {
+			phi =  2. * PI * (i as f64) / (size as f64);
+			vector.push(0.42 - 0.5 * phi.cos() + 0.08 * (2. * phi).cos());
+		}
+
+		Window {
+			overlap,
+			vector,
+		}
+
+	}
+	/// constructor method, create a Hamming window object
+	pub fn hamming(duration: f64, overlap_time: f64, fs: f64) -> Self {
+
+		let size: usize = (duration * fs).round() as usize;
+		let overlap: usize = (overlap_time * fs).round() as usize;
+		assert!(size > overlap);
+		// make window vector
+		let mut vector: Vec<f64> = Vec::new();
+		let mut phi: f64;
+		for i in 0..size {
+			phi =  2. * PI * (i as f64) / ((size-1) as f64);
+			vector.push(0.54 - 0.46 * phi.cos());
+		}
+
+		Window {
+			overlap,
+			vector,
+		}
+
+	}
+	/// constructor method, create a Hamming window object
+	pub fn gaussian(sigma: f64, duration: f64, overlap_time: f64, fs: f64) -> Self {
+
+		let size: usize = (duration * fs).round() as usize;
+		let overlap: usize = (overlap_time * fs).round() as usize;
+		assert!(size > overlap);
+		// make window vector
+		let mut vector: Vec<f64> = Vec::new();
+		let mut phi: f64;
+		for i in 0..size {
+			phi = -0.5 * ((i - size/2) as f64 / sigma).powi(2);
+			vector.push(phi.exp());
 		}
 
 		Window {
