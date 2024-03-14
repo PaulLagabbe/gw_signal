@@ -8,8 +8,11 @@ pub mod filters;
 pub mod windows;
 
 use std::{
+	str::FromStr,
 	f64::consts::PI,
 	fs::File,
+	io::BufReader,
+	io::BufRead,
 	io::Write};
 
 use crate::{
@@ -262,17 +265,18 @@ impl TimeSeries {
 
 
 /* --------------------------------------------------------------------------------------------- *
- * Visualize trait 
+ * SeriesIO trait 
  * --------------------------------------------------------------------------------------------- */
 /// This trait is for dedug purpose only.
 /// It provides a function to print some samples of the time/frequency series and to print it into a csv file.
-pub trait Visualize {
+pub trait SeriesIO {
     fn print(&self, n1: usize, n2: usize);
-	fn write(&self, file_name: &str);
+	fn write_csv(&self, file_name: &str);
+	fn read_csv(file_name: &str) -> Self;
 }
 
 
-impl Visualize for TimeSeries {
+impl SeriesIO for TimeSeries {
     fn print(&self, n1: usize, n2: usize){
 		let mut time: f64; 
         
@@ -283,7 +287,7 @@ impl Visualize for TimeSeries {
         }
     }
 
-	fn write(&self, file_name: &str){
+	fn write_csv(&self, file_name: &str){
 
 		let mut w = File::create(file_name).unwrap();
 		writeln!(&mut w, "time,value").unwrap();
@@ -296,12 +300,38 @@ impl Visualize for TimeSeries {
         }
 
 	}
+	
+	fn read_csv(file_name: &str) -> Self {
+
+		println!("Read file: {}", file_name);
+		// read file
+		let r = File::open(file_name).expect("The file is not found!");
+		let mut buffer = BufReader::new(r);
+
+		// initialize time and data vectors
+		let (mut time, mut data): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
+		// make iterator over lines and read file header
+		let mut line_iter = buffer.lines();
+		// read line, split it over the "," character and make a vector of strings
+		let mut line_str = line_iter.next().unwrap().unwrap();
+		let mut line_vec: Vec<&str> = line_str.split(",").collect();
+		assert_eq!(line_vec[0], "time");
+
+		for line in line_iter {
+			line_str = line.unwrap();
+			line_vec = line_str.split(",").collect();
+			time.push(f64::from_str(line_vec[0]).unwrap());
+			data.push(f64::from_str(line_vec[1]).unwrap());
+		}
+		let frequency: f64 = time.len() as f64/ (time[time.len()-1] - time[0]);
+		TimeSeries::from_vector(frequency, time[0], data)
+	}
 
 }
 
 
 
-impl Visualize for FrequencySeries {
+impl SeriesIO for FrequencySeries {
     
 	fn print(&self, n1: usize, n2: usize){
         let mut freq: f64;
@@ -313,7 +343,7 @@ impl Visualize for FrequencySeries {
         }
     }
 	
-	fn write(&self, file_name: &str){
+	fn write_csv(&self, file_name: &str){
 
 		let mut w = File::create(file_name).unwrap();
 		writeln!(&mut w, "frequency,modulus,phase").unwrap();
@@ -325,7 +355,36 @@ impl Visualize for FrequencySeries {
             writeln!(&mut w, "{},{},{}", freq, self[i].norm(), self[i].arg()).unwrap();
         }
 	}
+
+	fn read_csv(file_name: &str) -> Self {
+
+		println!("Read file: {}", file_name);
+		// read file
+		let r = File::open(file_name).expect("The file is not found!");
+		let mut buffer = BufReader::new(r);
+
+		// initialize time and data vectors
+		let (mut freq, mut data): (Vec<f64>, Vec<Complex<f64>>) = (Vec::new(), Vec::new());
+		// make iterator over lines and read file header
+		let mut line_iter = buffer.lines();
+		// read line, split it over the "," character and make a vector of strings
+		let mut line_str = line_iter.next().unwrap().unwrap();
+		let mut line_vec: Vec<&str> = line_str.split(",").collect();
+		assert_eq!(line_vec[0], "frequency");
+
+		for line in line_iter {
+			line_str = line.unwrap();
+			line_vec = line_str.split(",").collect();
+			freq.push(f64::from_str(line_vec[0]).unwrap());
+			data.push(f64::from_str(line_vec[1]).unwrap()
+				* Complex{re:0., im: f64::from_str(line_vec[2]).unwrap()}.exp());
+		}
+		FrequencySeries::from_vector(freq[freq.len()-1], data)
+	}
+
 }
+
+
 
 
 
