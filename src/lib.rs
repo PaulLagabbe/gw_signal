@@ -10,6 +10,7 @@ pub mod windows;
 use std::{
 	str::FromStr,
 	f64::consts::PI,
+	fmt::Display,
 	fs::File,
 	io::BufReader,
 	io::BufRead,
@@ -21,19 +22,50 @@ use crate::{
 	filters::Filter,
 	windows::Window,
 };
-use rustfft::{
-	FftPlanner,
-	num_complex::Complex
-};
+use rustfft::FftPlanner;
+
+use num::{Float, Complex, complex::ComplexFloat, NumCast};
+use std::ops::{AddAssign, SubAssign, MulAssign, DivAssign};
 //use more_asserts as ma;
 
 
+/* --------------------------------------------------------------------------------------------- *
+ * define data trait
+ * --------------------------------------------------------------------------------------------- */
+
+pub trait Data {
+    fn scale(self, slope: f64) -> Self;
+}
+impl Data for f32 {
+    fn scale(self, slope: f64) -> Self {
+        self * (slope as f32)
+    }
+}
+impl Data for f64 {
+    fn scale(self, slope: f64) -> Self {
+        self * slope
+    }
+}
+impl Data for Complex<f32>
+{
+    fn scale(self, slope: f64) -> Self {
+        self * Complex{re: slope as f32, im: 0f32}
+    }
+}
+impl Data for Complex<f64>
+{
+    fn scale(self, slope: f64) -> Self {
+        self * Complex{re: slope, im: 0f64}
+    }
+}
 
 /* --------------------------------------------------------------------------------------------- *
  * Constructors
  * --------------------------------------------------------------------------------------------- */
 
-impl TimeSeries {
+impl<D> TimeSeries<D> 
+	where D: ComplexFloat + AddAssign + SubAssign + MulAssign + DivAssign + Data,
+{
 
 	
 	/// Compute the cross spectal density between two signals, using the Welch's method
@@ -55,7 +87,7 @@ impl TimeSeries {
 	/// ```
 	pub fn csd(
 		&self,
-		other: &TimeSeries,
+		other: &TimeSeries<D>,
 		window: &Window) -> FrequencySeries {
 	
 		// initialize fft
@@ -116,7 +148,7 @@ impl TimeSeries {
 		window: &Window) -> FrequencySeries {
 
 		// use csd
-		let self_copy: &TimeSeries = &(self.clone());
+		let self_copy: &TimeSeries<D> = &(self.clone());
 		self.csd(&self_copy, window)
 	}
 	
@@ -164,7 +196,7 @@ impl TimeSeries {
 	/// ```
 	pub fn coherence(
 		&self,
-		other: &TimeSeries,
+		other: &TimeSeries<D>,
 		window: &Window) -> FrequencySeries {
 
 		let psd1: FrequencySeries = self.clone().psd(window);
@@ -193,13 +225,14 @@ impl TimeSeries {
 	/// ```
 	pub fn transfer_function(
 		&self,
-		other: &TimeSeries,
+		other: &TimeSeries<D>,
 		window: &Window) -> FrequencySeries {
 
 		let psd: FrequencySeries = self.clone().psd(window);
 		let mut csd: FrequencySeries = self.csd(other, window);
 		(&mut csd / &psd).clone()
 	}
+
 
 /* --------------------------------------------------------------------------------------------- */
 	/// The following method apply an IIR filter to a time series
@@ -240,24 +273,23 @@ impl TimeSeries {
 			b.append(&mut vec![0.; a.len()-b.len()]);
 		}
 		let n: usize = a.len();
-		println!("b = {:?}", b);
-		println!("a = {:?}", a);
 
 		// apply filter
-		let mut x: Vec<f64> = vec![self[0]; n-1];
+		let mut x: Vec<D> = vec![self[0]; n-1];
 		x.append(&mut self.get_data());
-		let mut y: Vec<f64> = x.clone();
+		let mut y: Vec<D> = x.clone();
 
 		for i in 0..self.get_size() {
-			y[i+a.len()-1] = 0.;
+			let mut temp_y: D = NumCast::from(0).unwrap();
 			for j in 0..b.len() {
-				y[i+a.len()-1] += b[j] * x[i + b.len()-1 - j];
+				temp_y += x[i + b.len()-1 - j].scale(b[j]);
 			}
 			for j in 1..a.len() {
-				y[i+a.len()-1] -= a[j] * y[i + a.len()-1 - j];
+				temp_y -= y[i + a.len()-1 - j].scale(a[j]);
 			}
-			y[i+a.len()-1] /= a[0];
-			self[i] = y[i+a.len()-1]
+			temp_y = temp_y.scale(1./a[0]);
+			self[i] = temp_y;
+			y[i+a.len()-1] = temp_y;
 		}
 
 	}
@@ -272,11 +304,11 @@ impl TimeSeries {
 pub trait SeriesIO {
     fn print(&self, n1: usize, n2: usize);
 	fn write_csv(&self, file_name: &str);
-	fn read_csv(file_name: &str) -> Self;
+	//fn read_csv(file_name: &str) -> Self;
 }
 
 
-impl SeriesIO for TimeSeries {
+impl<D: ComplexFloat + Display> SeriesIO for TimeSeries<D> {
     fn print(&self, n1: usize, n2: usize){
 		let mut time: f64; 
         
@@ -300,7 +332,7 @@ impl SeriesIO for TimeSeries {
         }
 
 	}
-	
+/*	
 	fn read_csv(file_name: &str) -> Self {
 
 		println!("Read file: {}", file_name);
@@ -326,7 +358,7 @@ impl SeriesIO for TimeSeries {
 		let frequency: f64 = time.len() as f64/ (time[time.len()-1] - time[0]);
 		TimeSeries::from_vector(frequency, time[0], data)
 	}
-
+*/
 }
 
 
@@ -355,7 +387,7 @@ impl SeriesIO for FrequencySeries {
             writeln!(&mut w, "{},{},{}", freq, self[i].norm(), self[i].arg()).unwrap();
         }
 	}
-
+/*
 	fn read_csv(file_name: &str) -> Self {
 
 		println!("Read file: {}", file_name);
@@ -381,7 +413,7 @@ impl SeriesIO for FrequencySeries {
 		}
 		FrequencySeries::from_vector(freq[freq.len()-1], data)
 	}
-
+*/
 }
 
 

@@ -1,9 +1,10 @@
 /* --------------------------------------------------------------------------------------------- *
  * Window functions
  * --------------------------------------------------------------------------------------------- */
-
+use num::{Float, complex::ComplexFloat, NumCast};
 use rustfft::num_complex::Complex;
 use std::f64::consts::PI;
+
 
 /// Window object, to be used to compute the Fourrier transform of a signal
 /// 
@@ -132,6 +133,9 @@ impl Window {
 		}
 
 	}
+}
+
+impl Window {
 	/// Compute the number of window that can be computed on the data vector given in parameter
 	pub fn nb_fft(&self, data_size: usize) -> usize {
 		(data_size - self.vector.len()) / (self.vector.len() - self.overlap) + 1
@@ -142,8 +146,10 @@ impl Window {
 		self.vector.len()
 	}
 
-	/// return a slive of the parameter data vector that has been windowed
-	pub fn get_windowed_data(&self, data: Vec<f64>, k: usize) -> Vec<Complex<f64>> {
+	/// return a slice of the parameter data vector that has been windowed
+	pub fn get_windowed_data<D>(&self, data: Vec<D>, k: usize) -> Vec<Complex<f64>> 
+	where D: ComplexFloat,
+	{
 		
 		assert!(k < self.nb_fft(data.len()));
 
@@ -151,15 +157,12 @@ impl Window {
 		let mut output: Vec<Complex<f64>> = Vec::new();
 		let start: usize = k * (self.vector.len() - self.overlap);
 		for i in 0..self.vector.len() {
-
-			output.push(Complex{
-				re:	data[i+start] * self.vector[i],
-				im: 0.});
+			let complex_data: Complex<f64> = NumCast::from(data[i+start]).unwrap();
+			output.push(complex_data * self.vector[i]);
 		}
 
 		output
 	}
-
 	/// Compute the integral of the square window
 	pub fn get_norm_factor(&self) -> f64 {
 
