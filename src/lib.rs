@@ -2,6 +2,7 @@
  * Libraries
  * --------------------------------------------------------------------------------------------- */
 
+pub mod data;
 pub mod timeseries;
 pub mod frequencyseries;
 pub mod filters;
@@ -21,6 +22,7 @@ use crate::{
 	frequencyseries::FrequencySeries,
 	filters::Filter,
 	windows::Window,
+	data::Data,
 };
 use rustfft::FftPlanner;
 
@@ -29,35 +31,6 @@ use std::ops::{AddAssign, SubAssign, MulAssign, DivAssign};
 //use more_asserts as ma;
 
 
-/* --------------------------------------------------------------------------------------------- *
- * define data trait
- * --------------------------------------------------------------------------------------------- */
-
-pub trait Data {
-    fn scale(self, slope: f64) -> Self;
-}
-impl Data for f32 {
-    fn scale(self, slope: f64) -> Self {
-        self * (slope as f32)
-    }
-}
-impl Data for f64 {
-    fn scale(self, slope: f64) -> Self {
-        self * slope
-    }
-}
-impl Data for Complex<f32>
-{
-    fn scale(self, slope: f64) -> Self {
-        self * Complex{re: slope as f32, im: 0f32}
-    }
-}
-impl Data for Complex<f64>
-{
-    fn scale(self, slope: f64) -> Self {
-        self * Complex{re: slope, im: 0f64}
-    }
-}
 
 /* --------------------------------------------------------------------------------------------- *
  * Constructors
@@ -299,19 +272,19 @@ impl<D> TimeSeries<D>
 /* --------------------------------------------------------------------------------------------- *
  * SeriesIO trait 
  * --------------------------------------------------------------------------------------------- */
+
 /// This trait is for dedug purpose only.
 /// It provides a function to print some samples of the time/frequency series and to print it into a csv file.
 pub trait SeriesIO {
     fn print(&self, n1: usize, n2: usize);
 	fn write_csv(&self, file_name: &str);
-	//fn read_csv(file_name: &str) -> Self;
+	fn read_csv(file_name: &str) -> Self;
 }
 
 
-impl<D: ComplexFloat + Display> SeriesIO for TimeSeries<D> {
+impl<D: ComplexFloat + Display + Data + Float> SeriesIO for TimeSeries<D> {
     fn print(&self, n1: usize, n2: usize){
-		let mut time: f64; 
-        
+		let mut time: f64;         
 		for i in n1..n2 {
             // compute time
             time = self.get_t0() + (i as f64) / self.get_fs();
@@ -324,41 +297,39 @@ impl<D: ComplexFloat + Display> SeriesIO for TimeSeries<D> {
 		let mut w = File::create(file_name).unwrap();
 		writeln!(&mut w, "time,value").unwrap();
 		let mut time: f64;
-
         for i in 0..self.get_size() {
             // compute time
             time = self.get_t0() + (i as f64) / self.get_fs();
-            writeln!(&mut w, "{},{}", time, self[i]).unwrap();
+            writeln!(&mut w, "{}", self[i].to_str(time)).unwrap();
         }
 
 	}
-/*	
+
 	fn read_csv(file_name: &str) -> Self {
 
 		println!("Read file: {}", file_name);
 		// read file
 		let r = File::open(file_name).expect("The file is not found!");
-		let mut buffer = BufReader::new(r);
+		let buffer = BufReader::new(r);
 
 		// initialize time and data vectors
-		let (mut time, mut data): (Vec<f64>, Vec<f64>) = (Vec::new(), Vec::new());
+		let (mut time, mut data): (Vec<f64>, Vec<D>) = (Vec::new(), Vec::new());
 		// make iterator over lines and read file header
 		let mut line_iter = buffer.lines();
 		// read line, split it over the "," character and make a vector of strings
-		let mut line_str = line_iter.next().unwrap().unwrap();
-		let mut line_vec: Vec<&str> = line_str.split(",").collect();
+		let line_str = line_iter.next().unwrap().unwrap();
+		let line_vec: Vec<&str> = line_str.split(",").collect();
 		assert_eq!(line_vec[0], "time");
 
 		for line in line_iter {
-			line_str = line.unwrap();
-			line_vec = line_str.split(",").collect();
-			time.push(f64::from_str(line_vec[0]).unwrap());
-			data.push(f64::from_str(line_vec[1]).unwrap());
+			let sample = D::from_string(line.expect("Unable to read line")).unwrap();
+			time.push(sample.0);
+			data.push(sample.1);
 		}
 		let frequency: f64 = time.len() as f64/ (time[time.len()-1] - time[0]);
 		TimeSeries::from_vector(frequency, time[0], data)
 	}
-*/
+
 }
 
 
@@ -384,10 +355,10 @@ impl SeriesIO for FrequencySeries {
         for i in 0..self.get_size() {
             // compute time
             freq = self.get_f_max() * (i as f64) / ((self.get_size()-1) as f64);
-            writeln!(&mut w, "{},{},{}", freq, self[i].norm(), self[i].arg()).unwrap();
+            writeln!(&mut w, "{},{},{}", freq, self[i].re(), self[i].im()).unwrap();
         }
 	}
-/*
+
 	fn read_csv(file_name: &str) -> Self {
 
 		println!("Read file: {}", file_name);
@@ -408,14 +379,15 @@ impl SeriesIO for FrequencySeries {
 			line_str = line.unwrap();
 			line_vec = line_str.split(",").collect();
 			freq.push(f64::from_str(line_vec[0]).unwrap());
-			data.push(f64::from_str(line_vec[1]).unwrap()
-				* Complex{re:0., im: f64::from_str(line_vec[2]).unwrap()}.exp());
+			data.push(Complex{
+				re: f64::from_str(line_vec[1]).unwrap(),
+				im: f64::from_str(line_vec[2]).unwrap()
+			});
 		}
 		FrequencySeries::from_vector(freq[freq.len()-1], data)
 	}
-*/
-}
 
+}
 
 
 

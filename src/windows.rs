@@ -1,7 +1,7 @@
 /* --------------------------------------------------------------------------------------------- *
  * Window functions
  * --------------------------------------------------------------------------------------------- */
-use num::{Float, complex::ComplexFloat, NumCast};
+use num::{complex::ComplexFloat, NumCast};
 use rustfft::num_complex::Complex;
 use std::f64::consts::PI;
 

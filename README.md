@@ -1,5 +1,4 @@
-I started this project to train myself on the rust programming language. If you have questions or suggestions, or if you want to report a bug, please write an email on plagabbe@gmail.com !!
-
+I started this project to train myself on the rust programming language.
 This library provides tools for signal processing and analysis. It is composed by four classes:
 
 

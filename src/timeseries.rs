@@ -46,11 +46,11 @@ impl<D: Float> TimeSeries<D> {
 		where StandardNormal: Distribution<D>
 		{
 		
-		let mut rng = thread_rng();
+		let rng = thread_rng();
         let normal = Normal::new(mu, sigma).unwrap();
 
         // fill data vector
-        let mut data_vec: Vec<D> = normal.sample_iter(rng).take(size).collect();
+        let data_vec: Vec<D> = normal.sample_iter(rng).take(size).collect();
 		
         // initialize TimeSeries
         TimeSeries::from_vector(fs, 0., data_vec)
