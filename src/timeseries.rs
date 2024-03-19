@@ -1,6 +1,7 @@
 /* --------------------------------------------------------------------------------------------- *
  * Time series and frequency series definition
  * --------------------------------------------------------------------------------------------- */
+pub mod data;
 
 use rand::thread_rng;
 use rand_distr::{Normal, StandardNormal, Distribution};
@@ -8,7 +9,7 @@ use std::f64::consts::PI;
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign, Div, DivAssign, Index, IndexMut};
 use more_asserts::assert_gt;
 use num::{Float, Complex, complex::ComplexFloat, NumCast};
-
+use data::Data;
 
 
 /* --------------------------------------------------------------------------------------------- *
@@ -26,8 +27,8 @@ pub struct TimeSeries<D> {
 
 
 
-impl<D: Float> TimeSeries<D> {
 
+impl<D: ComplexFloat + Float + Data> TimeSeries<D> {
     /// Real signal generators:
     /// 
     /// Generates a white noise signal with a given size, sampling frequency and the noise amplitude
@@ -55,7 +56,8 @@ impl<D: Float> TimeSeries<D> {
         // initialize TimeSeries
         TimeSeries::from_vector(fs, 0., data_vec)
     }
-
+}
+impl<D: ComplexFloat + Data> TimeSeries<D> {
     /// Generates a sinusoidal signal.
     /// 
     /// # Examples
@@ -82,8 +84,8 @@ impl<D: Float> TimeSeries<D> {
         // initialize TimeSeries
         TimeSeries::from_vector(fs, 0., data_vec)
     }
-
-    /// Generates a constant signal.
+    
+	/// Generates a constant signal.
     /// 
     /// # Examples
     ///

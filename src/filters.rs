@@ -38,7 +38,7 @@ impl Filter {
 	/// Compute the z-tranform of the filter from its Laplace transform, using the Tustin's method.
 	/// This function is called when the filter is applied to a time series using the [apply_filter]
 	/// method.
-	/// [apply_filter]: 
+	/// [apply_filter]: <https://docs.rs/gw_signal/0.1.2/gw_signal/timeseries/struct.TimeSeries.html>
 	pub fn bilinear_transform(&mut self) {
 
 		// there should be more pole than zeros
@@ -380,13 +380,18 @@ impl Filter {
 		}
 	}
 	/// Multiply the gain by given factor
+	/// ```math
+	/// H(s) = G
+	/// ```
 	pub fn gain_factor(&mut self, gain: f64) {
 
 		self.gain *= gain;
 	}
 
 	/// Add a first order pole at the given cutoff frequency 
-	/// H(s) = 1 / (1 + s / (2*PI*fc))
+	/// ```math
+	/// H(s) = \frac{1}{1 + \frac{s}{2 \pi fc}}
+	/// ```
 	pub fn add_pole_1(&mut self, fc: f64) {
 		
 		let omega: Complex<f64> = Complex{re: 2. * PI * fc, im: 0.};
@@ -395,7 +400,9 @@ impl Filter {
 	}
 
 	/// Add a first order zero at the given cutoff frequency 
-	/// H(s) = 1 / (1 + s / (q*2*PI*fc) + (s / (2*PI*fc))^2)
+	/// ```math 
+	/// H(s) = \frac{1}{1 + \frac{s}{q 2 \pi fc} + \left(\frac{s}{2 \pi fc}\right)^2}
+	/// ```
 	pub fn add_pole_2(&mut self, fc: f64, q: f64) {
 		let sum: f64 = PI * fc / q;
 		let root: Complex<f64>;
@@ -416,7 +423,9 @@ impl Filter {
 	}
 	
 	/// Add a n-order integrator filter
-	/// H(s) = 1 / (s)^n
+	/// ```math
+	/// H(s) = \frac{1}{s^n}
+	/// ```
 	pub fn add_integrator(&mut self, order: usize) {
 		
 		for _i in 0..order {
@@ -425,8 +434,10 @@ impl Filter {
 
 	}
 
-	/// Add a first order zero at the given cutoff frequency 
-	/// H(s) = 1 + s / (2*PI*fc)
+	/// Add a first order zero at the given cutoff frequency
+	/// ```math
+	/// H(s) = 1 + \frac{s}{2 \pi fc}
+	/// ```
 	pub fn add_zero_1(&mut self, fc: f64) {
 		
 		let omega: Complex<f64> = Complex{re: 2. * PI * fc, im: 0.};
@@ -434,8 +445,10 @@ impl Filter {
 		self.gain /= omega.norm();
 	}
 	
-	/// Add a first order zero at the given cutoff frequency 
-	/// H(s) = 1 + s / (q*2*PI*fc) + (s / (2*PI*fc))^2
+	/// Add a first order zero at the given cutoff frequency
+	/// ```math 
+	/// H(s) = 1 + \frac{s}{q 2 \pi fc} + \left(\frac{s}{2 \pi fc}\right)^2
+	/// ```
 	pub fn add_zeros_2(&mut self, fc: f64, q: f64) {
 		
 		let sum: f64 = PI * fc / q;
@@ -457,7 +470,9 @@ impl Filter {
 	}
 
 	/// Add a n-order derivator filter
-	/// H(s) = (s)^n
+	/// ```math
+	/// H(s) = s^n
+	/// ```
 	pub fn add_derivator(&mut self, order: usize) {
 		
 		for _i in 0..order {

@@ -2,7 +2,6 @@
  * Libraries
  * --------------------------------------------------------------------------------------------- */
 
-pub mod data;
 pub mod timeseries;
 pub mod frequencyseries;
 pub mod filters;
@@ -19,10 +18,10 @@ use std::{
 
 use crate::{
 	timeseries::TimeSeries,
+	timeseries::data::Data,
 	frequencyseries::FrequencySeries,
 	filters::Filter,
 	windows::Window,
-	data::Data,
 };
 use rustfft::FftPlanner;
 
@@ -45,7 +44,7 @@ impl<D> TimeSeries<D>
 	/// 
 	/// # Example
 	/// ```
-	/// use ::timeseries::{
+	/// use gw_signal::{
 	/// 	timeseries as ts,
 	/// 	windows as win,
 	/// };
@@ -103,7 +102,7 @@ impl<D> TimeSeries<D>
 	/// 
 	/// # Example
 	/// ```
-	/// use ::timeseries::{
+	/// use gw_signal::{
 	/// 	timeseries as ts,
 	/// 	windows as win,
 	/// };
@@ -129,7 +128,7 @@ impl<D> TimeSeries<D>
 	/// 
 	/// # Example
 	/// ```
-	/// use ::timeseries::{
+	/// use gw_signal::{
 	/// 	timeseries as ts,
 	/// 	windows as win,
 	/// };
@@ -154,7 +153,7 @@ impl<D> TimeSeries<D>
 	/// 
 	/// # Example
 	/// ```
-	/// use ::timeseries::{
+	/// use gw_signal::{
 	/// 	timeseries as ts,
 	/// 	windows as win,
 	/// };
@@ -183,7 +182,7 @@ impl<D> TimeSeries<D>
 	/// 
 	/// # Example
 	/// ```
-	/// use ::timeseries::{
+	/// use gw_signal::{
 	/// 	timeseries as ts,
 	/// 	windows as win,
 	/// };
@@ -212,7 +211,7 @@ impl<D> TimeSeries<D>
 	/// modify the original time series object.
 	/// # Example	
 	/// ```
-	/// use ::timeseries::{
+	/// use gw_signal::{
 	/// 	timeseries as ts,
 	/// 	filter as flt,
 	/// };
@@ -232,7 +231,7 @@ impl<D> TimeSeries<D>
 	pub fn apply_filter(&mut self, mut flt: Filter) {
 		
 		// compute bilinear transform
-		assert_eq!(self.get_fs(), flt.get_fs());
+		assert!((1. - self.get_fs() / flt.get_fs()).abs() < 1e-10);
 		flt.bilinear_transform();
 		
 		// compute the coefficiants of the z-transform of the filter
@@ -276,13 +275,55 @@ impl<D> TimeSeries<D>
 /// This trait is for dedug purpose only.
 /// It provides a function to print some samples of the time/frequency series and to print it into a csv file.
 pub trait SeriesIO {
+	/// 
+	/// # Example	
+	/// ```
+	/// use gw_signal::{
+	/// 	timeseries as ts,
+	/// 	Series_IO,
+	/// };
+	///
+	/// // creates a white noise signals
+	/// let fs: f64 = 1e3;
+	/// let mut signal: ts::TimeSeries = ts::TimeSeries::white_noise(20000, fs, 1.);
+	/// 
+	/// // print the 10 first values of the time series
+	/// signal.print(0, 10);
+	///
+	/// ```
     fn print(&self, n1: usize, n2: usize);
+
+	/// # Example	
+	/// ```
+	/// use gw_signal::{
+	/// 	timeseries as ts,
+	/// 	filter as flt,
+	/// };
+	/// 
+	/// // creates a white noise signals
+	/// let fs: f64 = 1e3;
+	/// let mut signal: ts::TimeSeries = ts::TimeSeries::white_noise(20000, fs, 1.);
+	/// 
+	/// // Write csv files
+	/// signal.write_csv("TimeSeries.csv");
+	/// ```
 	fn write_csv(&self, file_name: &str);
+
+	/// # Example	
+	/// ```
+	/// use gw_signal::{
+	/// 	timeseries as ts,
+	/// 	filter as flt,
+	/// };
+	/// 
+	/// // Read time series from csv files
+	/// let mut signal: ts::TimeSeries<f64> = ts::TimeSeries::<f64>::read_csv("TimeSeries.csv");
+	/// ```
 	fn read_csv(file_name: &str) -> Self;
 }
 
 
-impl<D: ComplexFloat + Display + Data + Float> SeriesIO for TimeSeries<D> {
+impl<D: ComplexFloat + Display + Data> SeriesIO for TimeSeries<D> {
     fn print(&self, n1: usize, n2: usize){
 		let mut time: f64;         
 		for i in n1..n2 {
@@ -326,7 +367,7 @@ impl<D: ComplexFloat + Display + Data + Float> SeriesIO for TimeSeries<D> {
 			time.push(sample.0);
 			data.push(sample.1);
 		}
-		let frequency: f64 = time.len() as f64/ (time[time.len()-1] - time[0]);
+		let frequency: f64 = (time.len()-1) as f64 / (time[time.len()-1] - time[0]);
 		TimeSeries::from_vector(frequency, time[0], data)
 	}
 
@@ -401,7 +442,7 @@ impl Filter {
 	/// 
 	/// # Example	
 	/// ```
-	/// use ::timeseries::{
+	/// use gw_signal::{
 	/// 	frequencyseries as fs,
 	/// 	filter as flt,
 	/// };
