@@ -438,21 +438,20 @@ impl SeriesIO for FrequencySeries {
 /// Draw time and frequency series
 /// If the series is real, draw one canvas
 /// If the series is complex, the canvas is splitted into the modulus and phase
-///
-/// # Example
-///
-/// ```
-/// use gw_signal::{
-/// 	timeseries as ts,
-/// 	Plot
-/// }
-/// 
-///	let sampling: f64 = 1e3;
-/// let mut signal: ts::TimeSeries = ts::TimeSeries::white_signal(20000, sampling, 0f64, 1f32);
-/// signal.plot("signal.png");
-/// ```
 pub trait Plot {
-	/// Plot function
+	/// Plot time series
+	/// 
+	/// # Example
+	/// ```
+	/// use gw_signal::{
+	/// 	timeseries as ts,
+	/// 	Plot
+	/// };
+	/// 
+	/// let sampling: f64 = 1e3;
+	/// let mut signal: ts::TimeSeries = ts::TimeSeries::white_noise(20000, sampling, 0f64, 1f64);
+	/// signal.plot("signal.png");
+	/// ```
 	fn plot(&self, name: &str);
 }
 
@@ -549,7 +548,7 @@ impl Plot for TimeSeries<Complex<f32>> {
 		let (y_min, y_max) = (self.imag().min(), self.imag().max());
 		
 		// draw canvas
-		let mut ctx = ChartBuilder::on(&top)
+		let mut ctx = ChartBuilder::on(&bottom)
 			.margin(20)
 			// axis
 			.set_label_area_size(LabelAreaPosition::Left, 64)

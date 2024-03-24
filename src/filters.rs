@@ -36,9 +36,8 @@ impl Filter {
 
 	/// Bilinear transform function
 	/// Compute the z-tranform of the filter from its Laplace transform, using the Tustin's method.
-	/// This function is called when the filter is applied to a time series using the [apply_filter]
+	/// This function is called when the filter is applied to a time series using the `apply_filter`
 	/// method.
-	/// [apply_filter]: <https://docs.rs/gw_signal/0.1.2/gw_signal/timeseries/struct.TimeSeries.html>
 	pub fn bilinear_transform(&mut self) {
 
 		// there should be more pole than zeros
@@ -175,7 +174,7 @@ impl Filter {
 	}
 	
 	/// Transform a filter defined by its poles and zeros, into its polynomial coefficiants
-	/// This function is called when the filter is applied to a time series using the [apply_filter]
+	/// This function is called when the filter is applied to a time series using the `apply_filter`
 	/// method.
 	pub fn polezero_to_coef(&self) -> (Vec<f64>, Vec<f64>) {
 		
