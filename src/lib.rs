@@ -24,9 +24,9 @@ use crate::{
 	windows::Window,
 };
 use rustfft::FftPlanner;
-
-use num::{Float, Complex, complex::ComplexFloat, NumCast};
+use num::{Complex, complex::ComplexFloat, NumCast};
 use std::ops::{AddAssign, SubAssign, MulAssign, DivAssign};
+use plotters::prelude::*;
 //use more_asserts as ma;
 
 
@@ -405,7 +405,7 @@ impl SeriesIO for FrequencySeries {
 		println!("Read file: {}", file_name);
 		// read file
 		let r = File::open(file_name).expect("The file is not found!");
-		let mut buffer = BufReader::new(r);
+		let buffer = BufReader::new(r);
 
 		// initialize time and data vectors
 		let (mut freq, mut data): (Vec<f64>, Vec<Complex<f64>>) = (Vec::new(), Vec::new());
@@ -431,6 +431,247 @@ impl SeriesIO for FrequencySeries {
 }
 
 
+/* --------------------------------------------------------------------------------------------- *
+ * Plot time series
+ * --------------------------------------------------------------------------------------------- */
+
+/// Draw time and frequency series
+/// If the series is real, draw one canvas
+/// If the series is complex, the canvas is splitted into the modulus and phase
+///
+/// # Example
+///
+/// ```
+/// use gw_signal::{
+/// 	timeseries as ts,
+/// 	Plot
+/// }
+/// 
+///	let sampling: f64 = 1e3;
+/// let mut signal: ts::TimeSeries = ts::TimeSeries::white_signal(20000, sampling, 0f64, 1f32);
+/// signal.plot("signal.png");
+/// ```
+pub trait Plot {
+	/// Plot function
+	fn plot(&self, name: &str);
+}
+
+impl Plot for TimeSeries<f32> {
+	fn plot(&self, name: &str) {
+		
+		let (x_min, x_max) = (self.get_t0(), self.get_t0() + self.get_size() as f64 / self.get_fs());
+		let (y_min, y_max) = (self.real().min(), self.real().max());
+		
+		// define white canvas
+		let drawing_area = BitMapBackend::new(name, (1365, 768)).into_drawing_area();
+		drawing_area.fill(&WHITE).unwrap();
+		
+		// define canvas features
+		let mut ctx = ChartBuilder::on(&drawing_area)
+			.margin(20)
+			// axis
+			.set_label_area_size(LabelAreaPosition::Left, 50)
+			.set_label_area_size(LabelAreaPosition::Bottom, 50)
+			// grid
+			.build_cartesian_2d(x_max..x_min, y_min..y_max)
+			.unwrap();
+
+		ctx.configure_mesh().draw().unwrap();
+		
+		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
+			self.get_t0() + index as f64 / self.get_fs(),
+			self[index]
+		)), &RED )).unwrap();
+
+	}
+}
+impl Plot for TimeSeries<f64> {
+	fn plot(&self, name: &str) {
+		
+		let (x_min, x_max) = (self.get_t0(), self.get_t0() + self.get_size() as f64 / self.get_fs());
+		let (y_min, y_max) = (self.real().min(), self.real().max());
+	
+		// define white canvas
+		let drawing_area = BitMapBackend::new(name, (1365, 768)).into_drawing_area();
+		drawing_area.fill(&WHITE).unwrap();
+		
+		// define canvas features
+		let mut ctx = ChartBuilder::on(&drawing_area)
+			.margin(20)
+			// axis
+			.set_label_area_size(LabelAreaPosition::Left, 100)
+			.set_label_area_size(LabelAreaPosition::Bottom, 100)
+			// caption
+			.caption("Timeseries",("sans-serif", 40))
+			// grid
+			.build_cartesian_2d(x_min..x_max, y_min..y_max)
+			.unwrap();
+
+		ctx.configure_mesh().draw().unwrap();
+		
+		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
+			self.get_t0() + index as f64 / self.get_fs(),
+			self[index]
+		)), &RED )).unwrap();
+
+	}
+}
+impl Plot for TimeSeries<Complex<f32>> {
+	fn plot(&self, name: &str) {
+		
+		// define white canvas
+		let drawing_area = BitMapBackend::new(name, (1365, 768)).into_drawing_area();
+		drawing_area.fill(&WHITE).unwrap();
+		let (top, bottom) = drawing_area.split_vertically(128);
+		
+		// draw real part
+		let (x_min, x_max) = (self.get_t0(), self.get_t0() + self.get_size() as f64 / self.get_fs());
+		let (y_min, y_max) = (self.real().min(), self.real().max());
+		
+		// draw canvas
+		let mut ctx = ChartBuilder::on(&top)
+			.margin(20)
+			// axis
+			.set_label_area_size(LabelAreaPosition::Left, 64)
+			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			// grid
+			.build_cartesian_2d(x_max..x_min, y_min..y_max)
+			.unwrap();
+
+		ctx.configure_mesh().draw().unwrap();
+		
+		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
+			self.get_t0() + index as f64 / self.get_fs(),
+			self.real()[index]
+		)), &RED )).unwrap();
+
+		// draw imaginary part
+		let (y_min, y_max) = (self.imag().min(), self.imag().max());
+		
+		// draw canvas
+		let mut ctx = ChartBuilder::on(&top)
+			.margin(20)
+			// axis
+			.set_label_area_size(LabelAreaPosition::Left, 64)
+			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			// grid
+			.build_cartesian_2d(x_max..x_min, y_min..y_max)
+			.unwrap();
+
+		ctx.configure_mesh().draw().unwrap();
+		
+		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
+			self.get_t0() + index as f64 / self.get_fs(),
+			self.imag()[index]
+		)), &RED )).unwrap();
+
+	}
+}
+impl Plot for TimeSeries<Complex<f64>> {
+	fn plot(&self, name: &str) {
+		
+		// define white canvas
+		let drawing_area = BitMapBackend::new(name, (1365, 768)).into_drawing_area();
+		drawing_area.fill(&WHITE).unwrap();
+		let (top, bottom) = drawing_area.split_vertically(384);
+		
+		// draw real part
+		let (x_min, x_max) = (self.get_t0(), self.get_t0() + self.get_size() as f64 / self.get_fs());
+		let (y_min, y_max) = (self.abs().min(), self.abs().max());
+		
+
+		// draw canvas
+		let mut ctx = ChartBuilder::on(&top)
+			.margin(20)
+			// axis
+			.set_label_area_size(LabelAreaPosition::Left, 64)
+			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			// grid
+			.build_cartesian_2d(x_max..x_min, y_min..y_max)
+			.unwrap();
+
+		ctx.configure_mesh().draw().unwrap();
+		
+		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
+			self.get_t0() + index as f64 / self.get_fs(),
+			self.abs()[index]
+		)), &RED )).unwrap();
+
+		// draw imaginary part
+		let (y_min, y_max) = (self.arg().min(), self.arg().max());
+		
+		// draw canvas
+		let mut ctx = ChartBuilder::on(&bottom)
+			.margin(20)
+			// axis
+			.set_label_area_size(LabelAreaPosition::Left, 64)
+			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			// grid
+			.build_cartesian_2d(x_max..x_min, y_min..y_max)
+			.unwrap();
+
+		ctx.configure_mesh().draw().unwrap();
+		
+		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
+			self.get_t0() + index as f64 / self.get_fs(),
+			self.arg()[index]
+		)), &RED )).unwrap();
+
+	}
+}
+
+impl Plot for FrequencySeries {
+	fn plot(&self, name: &str) {
+		
+		// define white canvas
+		let drawing_area = BitMapBackend::new(name, (1365, 768)).into_drawing_area();
+		drawing_area.fill(&WHITE).unwrap();
+		let (top, bottom) = drawing_area.split_vertically(384);
+		
+		// draw real part
+		let (x_min, x_max) = (self.get_f_max() / (self.get_size() - 1) as f64, self.get_f_max());
+		let (y_min, y_max) = (self.min_abs(), self.max_abs());
+		
+
+		// draw canvas
+		let mut ctx = ChartBuilder::on(&top)
+			.margin(20)
+			// axis
+			.set_label_area_size(LabelAreaPosition::Left, 64)
+			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			// grid
+			.build_cartesian_2d((x_min..x_max).log_scale(), (y_min..y_max).log_scale())
+			.unwrap();
+
+		ctx.configure_mesh().draw().unwrap();
+		
+		ctx.draw_series(LineSeries::new( (1..self.get_size()).map( |index| (
+			(index as f64 / (self.get_size() - 1) as f64) * self.get_f_max(),
+			self.clone().abs()[index].re
+		)), &RED )).unwrap();
+
+		// draw imaginary part
+		let (y_min, y_max) = (-PI, PI);
+		
+		// draw canvas
+		let mut ctx = ChartBuilder::on(&bottom)
+			.margin(20)
+			// axis
+			.set_label_area_size(LabelAreaPosition::Left, 64)
+			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			// grid
+			.build_cartesian_2d((x_min..x_max).log_scale(), y_min..y_max)
+			.unwrap();
+
+		ctx.configure_mesh().draw().unwrap();
+		
+		ctx.draw_series(LineSeries::new( (1..self.get_size()).map( |index| (
+			(index as f64 / (self.get_size()-1) as f64) * self.get_f_max(),
+			self.clone().arg()[index].re
+		)), &RED )).unwrap();
+
+	}
+}
 
 
 /* --------------------------------------------------------------------------------------------- *

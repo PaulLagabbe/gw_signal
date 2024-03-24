@@ -27,7 +27,6 @@ pub struct TimeSeries<D> {
 
 
 
-
 impl<D: ComplexFloat + Float + Data> TimeSeries<D> {
     /// Real signal generators:
     /// 
@@ -124,7 +123,7 @@ impl<D: ComplexFloat + Data> TimeSeries<D> {
  * --------------------------------------------------------------------------------------------- */
 
 /* Getter trait -------------------------------------------------------------------------------- */
-impl<D: ComplexFloat> TimeSeries<D> {
+impl<D: ComplexFloat<Real = F>, F> TimeSeries<D> {
 	
 	pub fn get_size(&self) -> usize {
 		self.data.len()
@@ -150,12 +149,85 @@ impl<D: ComplexFloat> TimeSeries<D> {
 		self
 	}
 	/// compute square root of the data
-	pub fn sqrt(mut self) -> TimeSeries<D> {
+	pub fn sqrt(&mut self) -> &mut TimeSeries<D> {
 		
 		for i in 0..self.data.len() {
 			self.data[i] = self.data[i].sqrt();
 		}
 		self
+	}
+	pub fn real(&self) -> TimeSeries<F> {
+		
+		let mut output: Vec<F> = Vec::new();
+		for i in 0..self.data.len() {
+			output.push(self.data[i].re());
+		}
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: output
+		}
+	}
+	pub fn imag(&self) -> TimeSeries<F> {
+		
+		let mut output: Vec<F> = Vec::new();
+		for i in 0..self.data.len() {
+			output.push(self.data[i].im());
+		}
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: output
+		}
+	}
+	pub fn abs(&self) -> TimeSeries<F> {
+		
+		let mut output: Vec<F> = Vec::new();
+		for i in 0..self.data.len() {
+			output.push(self.data[i].abs());
+		}
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: output
+		}
+	}
+	pub fn arg(&self) -> TimeSeries<F> {
+		
+		let mut output: Vec<F> = Vec::new();
+		for i in 0..self.data.len() {
+			output.push(self.data[i].arg());
+		}
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: output
+		}
+	}
+}
+
+
+impl<D: Float> TimeSeries<D> {
+	
+	pub fn max(&self) -> D {
+		let mut output: D = D::neg_infinity();
+
+		for sample in self.data.iter() {
+			if *sample > output {
+				output = *sample;
+			}
+		}
+		output
+	}
+	pub fn min(&self) -> D {
+		let mut output: D = D::infinity();
+
+		for sample in self.data.iter() {
+			if *sample < output {
+				output = *sample;
+			}
+		}
+		output
 	}
 }
 

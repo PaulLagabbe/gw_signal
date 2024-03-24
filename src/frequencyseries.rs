@@ -2,7 +2,10 @@
  * Frequency series definition
  * --------------------------------------------------------------------------------------------- */
 
-use rustfft::num_complex::Complex;
+use num::complex::{
+	Complex,
+	ComplexFloat
+};
 use std::ops::{Add, Neg, Sub, Mul, Div, Index, IndexMut};
 use more_asserts::assert_gt;
 
@@ -49,14 +52,14 @@ impl FrequencySeries {
 	}
 
 	/// compute real part of the data vector
-	pub fn re(mut self) -> FrequencySeries {
+	pub fn real(mut self) -> FrequencySeries {
 		for i in 0..self.data.len() {
 			self.data[i] = Complex{re: self.data[i].re, im: 0.0};
 		}
 		self
 	}
 	/// compute imaginary part of the data vector
-	pub fn im(mut self) -> FrequencySeries {
+	pub fn imag(mut self) -> FrequencySeries {
 		for i in 0..self.data.len() {
 			self.data[i] = Complex{re: self.data[i].im, im: 0.0};
 		}
@@ -107,9 +110,27 @@ impl FrequencySeries {
 		}
 		self
 	}
+	pub fn max_abs(&self) -> f64 {
+		
+		let mut maximum: f64 = 0f64;
+		for i in 0..self.get_size() {
+			if maximum < self[i].abs() {
+				maximum = self[i].abs();
+			}
+		}
+		maximum
+	}
+	pub fn min_abs(&self) -> f64 {
+		
+		let mut minimum: f64 = f64::INFINITY;
+		for i in 0..self.get_size() {
+			if minimum > self[i].abs() {
+				minimum = self[i].abs();
+			}
+		}
+		minimum
+	}
 }
-
-
 
 /* --------------------------------------------------------------------------------------------- *
  * Operator overloading:
