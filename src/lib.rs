@@ -230,11 +230,12 @@ impl<D> TimeSeries<D>
 
 	pub fn apply_filter(&mut self, mut flt: Filter) {
 		
-		// compute bilinear transform
 		assert!((1. - self.get_fs() / flt.get_fs()).abs() < 1e-10);
+		// warp frequencies
+		flt.adapt_frequencies(true);
+		// compute bilinear transform of the filter, the filter is now in the z-space
 		flt.bilinear_transform();
-		
-		// compute the coefficiants of the z-transform of the filter
+		// compute the polynomial coefficiants of the z-transform of the filter
 		let (mut b, mut a): (Vec<f64>, Vec<f64>) = flt.polezero_to_coef();
 
 		// complete a or b with 0. so that the two vectors have the same size
@@ -244,9 +245,10 @@ impl<D> TimeSeries<D>
 		else if a.len() > b.len() {
 			b.append(&mut vec![0.; a.len()-b.len()]);
 		}
+		// number of pole and zeros
 		let n: usize = a.len();
 
-		// apply filter
+		// apply filter to the data vector
 		let mut x: Vec<D> = vec![self[0]; n-1];
 		x.append(&mut self.get_data());
 		let mut y: Vec<D> = x.clone();
@@ -390,7 +392,7 @@ impl SeriesIO for FrequencySeries {
 	fn write_csv(&self, file_name: &str){
 
 		let mut w = File::create(file_name).unwrap();
-		writeln!(&mut w, "frequency,modulus,phase").unwrap();
+		writeln!(&mut w, "frequency,real,imaginary").unwrap();
 		let mut freq: f64;
 
         for i in 0..self.get_size() {
@@ -674,45 +676,34 @@ impl Plot for FrequencySeries {
 
 
 /* --------------------------------------------------------------------------------------------- *
- * Compute frequency response
+ * Filter methods
  * --------------------------------------------------------------------------------------------- */
 
+/// 
 impl Filter {
-	/// Compute the frequency response of an IIR filter
-	/// 
-	/// # Example	
-	/// ```
-	/// use gw_signal::{
-	/// 	frequencyseries as fs,
-	/// 	filter as flt,
-	/// };
-	///
-	/// // generates an 8th butterworth lowpass filter at 10 Hz
-	/// let butter: flt::Filter::butterworth(8, flt::BType::LowType(10.), fs);
-	/// 
-	/// // compute the frequency response of the filter
-	/// let mut response: fs::FrequencySeries = butter.frequency_response(10000);
-	///
-	/// ```
+
 
 	pub fn frequency_response(&self, size: usize) -> FrequencySeries {
 
+		// warp frequencies
+		let mut clone_filter = self.clone();
+		clone_filter.adapt_frequencies(false);
+		// initialize frequency series
 		let mut response: FrequencySeries = FrequencySeries::from_vector(
-			self.get_fs()/2., vec![Complex{re:1., im: 0.}; size]);
+			clone_filter.get_fs()/2., vec![Complex{re: clone_filter.get_gain(), im: 0.}; size]);
 		let mut frequency: f64;
 
 		for i in 0..size {
-			frequency = self.get_fs() / 2. * (i as f64) / ((size-1) as f64);
+			frequency = clone_filter.get_fs() / 2. * (i as f64) / ((size-1) as f64);
 
-			// apply poles
-			for p in self.get_poles().iter() {
-				response[i] /= Complex{re: 0., im: 2. * PI * frequency} - p
-			}
 			// apply zeros
-			for z in self.get_zeros().iter() {
-				response[i] *= Complex{re: 0., im: 2. * PI * frequency} - z
+			for z in clone_filter.get_zeros().iter() {
+				response[i] *= Complex{re: 0., im: frequency} - z
 			}
-			response[i] *= self.get_gain();
+			// apply poles
+			for p in clone_filter.get_poles().iter() {
+				response[i] /= Complex{re: 0., im: frequency} - p
+			}
 		}
 		response
 	}

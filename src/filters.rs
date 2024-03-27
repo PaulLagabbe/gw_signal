@@ -7,6 +7,16 @@ use rustfft::num_complex::Complex;
 use more_asserts as ma;
 
 
+/// Bandwidth type, to define the filter bandpass and cutoff frequency(ies)
+/// low pass, high pass and band pass
+#[derive(Debug, Clone)]
+pub enum BType {
+	LowPass(f64),
+	HighPass(f64),
+	BandPass(f64, f64),
+	Custom,
+}
+
 /// IIR Filter object. This object modelizes both the IIR and the FIR filters.
 /// A filter can be defined in two ways:
 ///
@@ -21,178 +31,11 @@ pub struct Filter {
 	gain: f64,
 	poles: Vec<Complex<f64>>,
 	zeros: Vec<Complex<f64>>,
-	fs: f64
+	fs: f64,
+	band: BType
 }
-/// Bandwidth type, to define the filter bandpass and cutoff frequency(ies)
-/// low pass, high pass and band pass
-pub enum BType {
-	LowPass(f64),
-	HighPass(f64),
-	BandPass(f64, f64),
-}
-
 
 impl Filter {
-
-	/// Bilinear transform function
-	/// Compute the z-tranform of the filter from its Laplace transform, using the Tustin's method.
-	/// This function is called when the filter is applied to a time series using the `apply_filter`
-	/// method.
-	pub fn bilinear_transform(&mut self) {
-
-		// there should be more pole than zeros
-		ma::assert_ge!(self.poles.len(), self.zeros.len());
-
-		// compute the bilinear transform of the pole and zeros
-		let mut gain_factor: Complex<f64> = Complex{re: 1., im: 0.};
-		for i in 0..self.poles.len() {
-			gain_factor /= 2. * self.fs - self.poles[i];
-			self.poles[i] = (2. * self.fs + self.poles[i]) / (2. * self.fs - self.poles[i]);
-		}
-		for i in 0..self.zeros.len() {
-			gain_factor *= 2. * self.fs - self.zeros[i];
-			self.zeros[i] = (2. * self.fs + self.zeros[i]) / (2. * self.fs - self.zeros[i]);
-		}
-
-		self.gain *= gain_factor.re;
-		
-		// complete the list of zeros with -1., so the two lists have the same size
-		self.zeros.append(&mut vec![Complex{re:-1., im: 0.}; self.poles.len()-self.zeros.len()]);
-	}
-
-	/* ----------------------------------------------------------------------------------------- */
-	fn adapt_frequencies_lp(&mut self, factor: f64) {
-	
-		/* ------------------------------------------------------------------------------------- *
-		 * Scale the pole and zeros frequencies, and the gain of the filter by a factor given in
-		 * parameters
-		 * ------------------------------------------------------------------------------------- */
-
-        let dim: usize = self.poles.len() - self.zeros.len();
-
-        // adapt the poles, zeros and gain values to the cutoff frequency
-        for i in 0..self.zeros.len() {
-            self.zeros[i] *= factor;
-        }
-        for i in 0..self.poles.len() {
-            self.poles[i] *= factor;
-        }
-        self.gain *= factor.powi(dim as i32);
-	}
-
-	
-	/// private function
-	fn adapt_frequencies_hp(&mut self, factor: f64) {
-	
-        let dim: usize = self.poles.len() - self.zeros.len();
-
-        // adapt the poles, zeros and gain values to the cutoff frequency
-		let mut gain_factor: Complex<f64> = Complex{re: 1., im: 0.};
-        for i in 0..self.zeros.len() {
-			gain_factor *= -self.zeros[i];
-            self.zeros[i] = factor / self.zeros[i];
-        }
-		self.zeros.append(&mut vec![Complex{re:0., im:0.}; dim]);
-        for i in 0..self.poles.len() {
-			gain_factor /= -self.poles[i];
-            self.poles[i] = factor / self.poles[i];
-        }
-        self.gain *= gain_factor.re;
-	}
-
-	/// private function
-	fn adapt_frequencies_bp(&mut self, factor: f64, width: f64) {
-	
-		let dim: usize = self.poles.len() - self.zeros.len();
-		let mut fshift: Complex<f64>;
-        
-		// adapt the poles, zeros and gain values to the cutoff frequency
-        for i in 0..self.zeros.len() {
-            self.zeros[i] *= width / 2.;
-			fshift = (self.zeros[i] * self.zeros[i] - factor * factor).sqrt();
-			self.zeros.push(self.zeros[i] - fshift);
-			self.zeros[i] += fshift;
-        }
-		self.zeros.append(&mut vec![Complex{re:0., im:0.}; dim]);
-        
-		for i in 0..self.poles.len() {
-            self.poles[i] *= width / 2.;
-			fshift = (self.poles[i] * self.poles[i] - factor * factor).sqrt();
-			self.poles.push(self.poles[i] - fshift);
-			self.poles[i] += fshift;
-        }
-        
-		self.gain *= width.powi(dim as i32);
-	}
-
-	/// private function
-	/// Transform the filter into a lowpass, highpass, bandpass... and the given cutoff frequency(ies)
-	fn adapt_frequencies(&mut self, band: BType) {
-
-		match band {
-			BType::LowPass(cutoff) => {
-				let omega: f64 = 2. * self.fs * (PI * cutoff / self.fs).tan();
-				self.adapt_frequencies_lp(omega);
-			}
-			BType::HighPass(cutoff) => {
-				let omega: f64 = 2. * self.fs * (PI * cutoff / self.fs).tan();
-				self.adapt_frequencies_hp(omega);
-			}
-			BType::BandPass(cutoff_1, cutoff_2) => {
-				ma::assert_ge!(cutoff_2, cutoff_1);
-				let omega_1: f64 = 2. * self.fs * (PI * cutoff_1 / self.fs).tan();
-				let omega_2: f64 = 2. * self.fs * (PI * cutoff_2 / self.fs).tan();
-				self.adapt_frequencies_bp((omega_1 * omega_2).sqrt(), omega_2 - omega_1);
-			}
-		}
-
-	}
-
-	/// private function
-	fn zero2coef(mut zeros: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
-		
-		/* Convert the zeros of a polynome into its coefficiants
-		 * recursive function !! */
-
-		if zeros.len() < 1 {
-			vec![Complex{re: 1., im: 0.}]
-		}
-		else if zeros.len() == 1 {
-			vec![Complex{re: 1., im: 0.}, -zeros[0]]
-		}
-		else {
-			let z: Complex<f64> = zeros.remove(0);
-			let temp: Vec<Complex<f64>> = Self::zero2coef(zeros);
-			let mut output: Vec<Complex<f64>> = vec![temp[0]];
-			
-			for i in 0..(temp.len() - 1) {
-				output.push(temp[i+1] - z * temp[i]);
-			}
-			output.push(-z * temp[temp.len()-1]);
-			output
-		}
-	}
-	
-	/// Transform a filter defined by its poles and zeros, into its polynomial coefficiants
-	/// This function is called when the filter is applied to a time series using the `apply_filter`
-	/// method.
-	pub fn polezero_to_coef(&self) -> (Vec<f64>, Vec<f64>) {
-		
-		let a_comp: Vec<Complex<f64>> = Self::zero2coef(self.poles.clone());
-		let b_comp: Vec<Complex<f64>> = Self::zero2coef(self.zeros.clone());
-		let mut a: Vec<f64> = Vec::new();
-		let mut b: Vec<f64> = Vec::new();
-
-		for i in 0..b_comp.len() {
-			b.push(self.gain * b_comp[i].re);
-		}
-		for j in 0..a_comp.len() {
-			a.push(a_comp[j].re);
-		}
-		
-		(b, a)
-	}
-
 	/// Standard filter generators: These methods are Filter object constructors.
 	/// So far, Butterworth, types 1 and 2 Chebyshev filters, low pass, high pass and band pass
 	/// can be generated.
@@ -217,13 +60,18 @@ impl Filter {
 		/* ------------------------------------------------------------------------------------- *
 		 * Initialize Butterworth filter with the order given in parameter
 		 * ------------------------------------------------------------------------------------- */
+		match band {
+			BType::Custom => panic!("A Butterworth filter cannot be a custom filter."),
+			_ => {}
+		}
 
 		// initialize filter
 		let mut output: Self = Filter{
 			gain: 1.,
 			poles: Vec::new(),
 			zeros: Vec::new(),
-			fs: fs
+			fs: fs,
+			band: band
 		};
 		
 		// compute filter poles
@@ -233,9 +81,6 @@ impl Filter {
 				im: PI * (-(order as i32) + 1 + 2 * (i as i32)) as f64 / (2 * order) as f64
 			}.exp());
 		}
-		
-		// adapt the poles, zeros and gain values to the cutoff frequency
-		output.adapt_frequencies(band);
 		output
 	}
 	/// Generates type 1 Chebyshev filter
@@ -258,6 +103,10 @@ impl Filter {
 		 * Type 1 Chebyshev filter
 		 * the order and the ripple factor (in dB) are given in parameter
 		 * ------------------------------------------------------------------------------------- */
+		match band {
+			BType::Custom => panic!("A Chebyshev filter cannot be a custom filter."),
+			_ => {}
+		}
 
 		let eps: f64 = ((10_f64).powf(ripple/10.) - 1.).sqrt();
 		let mu: f64 = (1. / eps).asinh() / (order as f64);
@@ -267,7 +116,8 @@ impl Filter {
 			gain: 1.,
 			poles: Vec::new(),
 			zeros: Vec::new(),
-			fs: fs
+			fs: fs,
+			band: band
 		};
 		
 		// compute filter poles
@@ -288,8 +138,6 @@ impl Filter {
 		if order % 2 == 0 {
 			output.gain /= (1. + eps * eps).sqrt();
 		}
-		// adapt the poles, zeros and gain values to the cutoff frequency
-		output.adapt_frequencies(band);
 		output
 	}
 	
@@ -312,7 +160,10 @@ impl Filter {
 		 * Type 1 Chebyshev filter
 		 * the order and the attenuation factor (in dB) are given in parameter
 		 * ------------------------------------------------------------------------------------- */
-
+		match band {
+			BType::Custom => panic!("A Chebyshev filter cannot be a custom filter."),
+			_ => {}
+		}
 		let eps: f64 = 1. / ((10_f64).powf(attenuation/10.) - 1.).sqrt();
 		let mu: f64 = (1. / eps).asinh() / (order as f64);
 
@@ -321,7 +172,8 @@ impl Filter {
 			gain: 1.,
 			poles: Vec::new(),
 			zeros: Vec::new(),
-			fs: fs
+			fs: fs,
+			band: band
 		};
 		
 
@@ -361,9 +213,6 @@ impl Filter {
 
 		// compute filter gain
 		output.gain = comp_gain.re;
-
-		// adapt the poles, zeros and gain values to the cutoff frequency
-		output.adapt_frequencies(band);
 		output
 	}
 	
@@ -375,7 +224,8 @@ impl Filter {
 			gain: 1.,
 			poles: Vec::new(),
 			zeros: Vec::new(),
-			fs: fs
+			fs: fs,
+			band: BType::Custom,
 		}
 	}
 	/// Multiply the gain by given factor
@@ -479,11 +329,208 @@ impl Filter {
 		}
 
 	}
+	
 
+
+	/* ----------------------------------------------------------------------------------------- *
+	 * Utility function
+	 * ----------------------------------------------------------------------------------------- */
+	/// private function
+	/// Bilinear transform function
+	/// Compute the z-tranform of the filter from its Laplace transform, using the Tustin's method.
+	/// This function is called when the filter is applied to a time series using the `apply_filter`
+	/// method.
+	pub fn bilinear_transform(&mut self) {
+
+		// there should be more pole than zeros
+		ma::assert_ge!(self.poles.len(), self.zeros.len());
+
+		// compute the bilinear transform of the pole and zeros
+		let mut gain_factor: Complex<f64> = Complex{re: 1., im: 0.};
+		for i in 0..self.poles.len() {
+			gain_factor /= 2. * self.fs - self.poles[i];
+			self.poles[i] = (2. * self.fs + self.poles[i]) / (2. * self.fs - self.poles[i]);
+		}
+		for i in 0..self.zeros.len() {
+			gain_factor *= 2. * self.fs - self.zeros[i];
+			self.zeros[i] = (2. * self.fs + self.zeros[i]) / (2. * self.fs - self.zeros[i]);
+		}
+
+		self.gain *= gain_factor.re;
+		
+		// complete the list of zeros with -1., so the two lists have the same size
+		self.zeros.append(&mut vec![Complex{re:-1., im: 0.}; self.poles.len()-self.zeros.len()]);
+	}
+
+	/// private function
+	fn adapt_frequencies_lp(&mut self, factor: f64) {
+	
+		/* ------------------------------------------------------------------------------------- *
+		 * Scale the pole and zeros frequencies, and the gain of the filter by a factor given in
+		 * parameters
+		 * ------------------------------------------------------------------------------------- */
+
+        let dim: usize = self.poles.len() - self.zeros.len();
+
+        // adapt the poles, zeros and gain values to the cutoff frequency
+        for i in 0..self.zeros.len() {
+            self.zeros[i] *= factor;
+        }
+        for i in 0..self.poles.len() {
+            self.poles[i] *= factor;
+        }
+        self.gain *= factor.powi(dim as i32);
+	}
+
+	
+	/// private function
+	fn adapt_frequencies_hp(&mut self, factor: f64) {
+	
+        let dim: usize = self.poles.len() - self.zeros.len();
+
+        // adapt the poles, zeros and gain values to the cutoff frequency
+		let mut gain_factor: Complex<f64> = Complex{re: 1., im: 0.};
+        for i in 0..self.zeros.len() {
+			gain_factor *= -self.zeros[i];
+            self.zeros[i] = factor / self.zeros[i];
+        }
+		self.zeros.append(&mut vec![Complex{re:0., im:0.}; dim]);
+        for i in 0..self.poles.len() {
+			gain_factor /= -self.poles[i];
+            self.poles[i] = factor / self.poles[i];
+        }
+        self.gain *= gain_factor.re;
+	}
+
+	/// private function
+	fn adapt_frequencies_bp(&mut self, factor: f64, width: f64) {
+	
+		let dim: usize = self.poles.len() - self.zeros.len();
+		let mut fshift: Complex<f64>;
+        
+		// adapt the poles, zeros and gain values to the cutoff frequency
+        for i in 0..self.zeros.len() {
+            self.zeros[i] *= width / 2.;
+			fshift = (self.zeros[i] * self.zeros[i] - factor * factor).sqrt();
+			self.zeros.push(self.zeros[i] - fshift);
+			self.zeros[i] += fshift;
+        }
+		self.zeros.append(&mut vec![Complex{re:0., im:0.}; dim]);
+        
+		for i in 0..self.poles.len() {
+            self.poles[i] *= width / 2.;
+			fshift = (self.poles[i] * self.poles[i] - factor * factor).sqrt();
+			self.poles.push(self.poles[i] - fshift);
+			self.poles[i] += fshift;
+        }
+        
+		self.gain *= width.powi(dim as i32);
+	}
+	/// Transform the filter into a lowpass, highpass, bandpass...
+	/// and the given cutoff frequency(ies)
+	pub fn adapt_frequencies(&mut self, zspace: bool) {
+		
+		match self.band {
+			BType::LowPass(cutoff) => {
+				let omega: f64;
+				if zspace {
+					omega = 2. * self.fs * (PI * cutoff / self.fs).tan();
+				} else {
+					omega = cutoff;
+				}
+				self.adapt_frequencies_lp(omega);
+			}
+			BType::HighPass(cutoff) => {
+				let omega: f64;
+				if zspace {
+					omega = 2. * self.fs * (PI * cutoff / self.fs).tan();
+				} else {
+					omega = cutoff;
+				}
+				self.adapt_frequencies_hp(omega);
+			}
+			BType::BandPass(cutoff_1, cutoff_2) => {
+				assert!(cutoff_2 > cutoff_1);
+				let (omega_1, omega_2): (f64, f64);
+				if zspace {
+					omega_1 = 2. * self.fs * (PI * cutoff_1 / self.fs).tan();
+					omega_2 = 2. * self.fs * (PI * cutoff_2 / self.fs).tan();
+				} else {
+					(omega_1, omega_2) = (cutoff_1, cutoff_2);
+				}
+				self.adapt_frequencies_bp((omega_1 * omega_2).sqrt(), omega_2 - omega_1);
+			}
+			BType::Custom => {}
+		}
+
+	}
+	
+	/// private function
+	/// Computes the polynomial coefficients from its zeros
+	fn zero2coef(mut zeros: Vec<Complex<f64>>) -> Vec<Complex<f64>> {
+		
+		/* Convert the zeros of a polynome into its coefficiants
+		 * recursive function !! */
+
+		if zeros.len() < 1 {
+			vec![Complex{re: 1., im: 0.}]
+		}
+		else if zeros.len() == 1 {
+			vec![Complex{re: 1., im: 0.}, -zeros[0]]
+		}
+		else {
+			let z: Complex<f64> = zeros.remove(0);
+			let temp: Vec<Complex<f64>> = Self::zero2coef(zeros);
+			let mut output: Vec<Complex<f64>> = vec![temp[0]];
+			
+			for i in 0..(temp.len() - 1) {
+				output.push(temp[i+1] - z * temp[i]);
+			}
+			output.push(-z * temp[temp.len()-1]);
+			output
+		}
+	}
+
+	/// private function
+	/// Transform a filter defined by its poles and zeros, into its polynomial coefficiants
+	/// This function is called when the filter is applied to a time series using the `apply_filter`
+	/// method.
+	pub fn polezero_to_coef(&self) -> (Vec<f64>, Vec<f64>) {
+		
+		let a_comp: Vec<Complex<f64>> = Self::zero2coef(self.poles.clone());
+		let b_comp: Vec<Complex<f64>> = Self::zero2coef(self.zeros.clone());
+		let mut a: Vec<f64> = Vec::new();
+		let mut b: Vec<f64> = Vec::new();
+
+		for i in 0..b_comp.len() {
+			b.push(self.gain * b_comp[i].re);
+		}
+		for j in 0..a_comp.len() {
+			a.push(a_comp[j].re);
+		}
+		
+		(b, a)
+	}
+
+	/// Compute the frequency response of an IIR filter, return a frequency series
+	/// 
+	/// # Example	
+	/// ```
+	/// use gw_signal::{
+	/// 	frequencyseries as fs,
+	/// 	filter as flt,
+	/// };
+	///
+	/// // generates an 8th butterworth lowpass filter at 10 Hz
+	/// let butter: flt::Filter = flt::Filter::butterworth(8, flt::BType::LowType(10.), fs);
+	/// 
+	/// // compute the frequency response of the filter
+	/// let mut response: fs::FrequencySeries = butter.frequency_response(10000);
+	///
+	/// ```
 	/* ----------------------------------------------------------------------------------------- *
 	 * getter functions
 	 * ----------------------------------------------------------------------------------------- */
-
 	pub fn get_poles(&self) -> Vec<Complex<f64>> {
 		self.poles.clone()
 	}
@@ -496,7 +543,10 @@ impl Filter {
 	pub fn get_fs(&self) -> f64 {
 		self.fs
 	}
-
+	pub fn get_band(&self) -> BType {
+		self.band.clone()
+	}
+	
 	/* ----------------------------------------------------------------------------------------- *
 	 * print functions
 	 * ----------------------------------------------------------------------------------------- */
