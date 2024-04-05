@@ -35,11 +35,11 @@ impl<D: ComplexFloat + Float + Data> TimeSeries<D> {
     /// # Examples
     ///
     /// ```
-    /// use ::timeseries::timeseries as ts;
+    /// use gw_signal::timeseries::*;
     /// 
     /// // creates a white noise signal with 20000 points, sampled at 1 kHz,
     /// // the variance of the noise as 0.1 V
-    /// let mut signal: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1e-1);
+    /// let mut signal: TimeSeries = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
     ///
     /// ```
     pub fn white_noise(size: usize, fs: f64, mu: D, sigma: D) -> Self 
@@ -62,12 +62,12 @@ impl<D: ComplexFloat + Data> TimeSeries<D> {
     /// # Examples
     ///
     /// ```
-    /// use ::timeseries::timeseries as ts;
+    /// use gw_signal::timeseries::*;
     ///
-    /// // creates a sinusoidal signal with 20000 points, sampled at 1 kHz
+    /// // creates a sinusoidal signal with 20000 points, sampled at 1 kHz, using 8 bytes for each sample
     /// // The frequency, amplitudes and phase at the origin are respectively:
     /// //  5 Hz, 10 V and 0 rad.
-    /// let mut signal: ts::TimeSeries = ts::TimeSeries::wave(20000, 1e3, 5., 10., 0.);
+    /// let mut signal: TimeSeries = TimeSeries::wave(20000, 1e3, 5f64, 10f64, 0f64);
     ///
     /// ```
     pub fn wave(size: usize, fs: f64, freq: D, ampl: D, phase: D) -> Self {
@@ -89,10 +89,10 @@ impl<D: ComplexFloat + Data> TimeSeries<D> {
     /// # Examples
     ///
     /// ```
-    /// use ::timeseries::timeseries as ts;
+    /// use gw_signal::timeseries::*;
     ///
     /// // creates a constant signal with 20000 points, sampled at 1 kHz
-    /// let mut signal: ts::TimeSeries = ts::TimeSeries::constant(20000, 1e3, 1.);
+    /// let mut signal: TimeSeries = TimeSeries::constant(20000, 1e3, 1f64);
     ///
     /// ```
     pub fn constant(size: usize, fs: f64, value: D) -> Self {
@@ -123,6 +123,7 @@ impl<D: ComplexFloat + Data> TimeSeries<D> {
  * --------------------------------------------------------------------------------------------- */
 
 /* Getter trait -------------------------------------------------------------------------------- */
+/// Getter functions
 impl<D: ComplexFloat<Real = F>, F> TimeSeries<D> {
 	
 	pub fn get_size(&self) -> usize {
@@ -140,6 +141,10 @@ impl<D: ComplexFloat<Real = F>, F> TimeSeries<D> {
 	pub fn get_data(&self) -> Vec<D> {
 		self.data.clone()
 	}
+}
+
+/// Math functions
+impl<D: ComplexFloat<Real = F>, F> TimeSeries<D> {
 	/// compute the inverse value of the data
 	pub fn inv(&mut self) -> &mut TimeSeries<D> {
 		
@@ -206,9 +211,9 @@ impl<D: ComplexFloat<Real = F>, F> TimeSeries<D> {
 	}
 }
 
-
+/// Math functions for real time series
 impl<D: Float> TimeSeries<D> {
-	
+	/// Get the maximum value of the time series
 	pub fn max(&self) -> D {
 		let mut output: D = D::neg_infinity();
 
@@ -219,6 +224,7 @@ impl<D: Float> TimeSeries<D> {
 		}
 		output
 	}
+	/// Get the maximum value of the time series
 	pub fn min(&self) -> D {
 		let mut output: D = D::infinity();
 
@@ -232,6 +238,270 @@ impl<D: Float> TimeSeries<D> {
 }
 
 
+
+/* --------------------------------------------------------------------------------------------- */
+/// Transform the data type into another
+pub trait ToType {
+	/// Transform time series into a time series of f32. Copy the data vector
+	/// If the initial time series is complex, takes the real part of the data
+	///
+	/// # Example
+	/// 
+	/// ```
+    /// use gw_signal::timeseries::*;
+	/// 	
+    /// 
+    /// // creates a white noise signal
+    /// let signal_f64: TimeSeries<f64> = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
+	/// let signal_f32: TimeSeries<f32> = signal_f64.to_f32();
+	/// ```
+	fn to_f32(&self) -> TimeSeries<f32>;
+	/// Transform time series into a time series of f64. Copy the data vector
+	/// If the initial time series is complex, takes the real part of the data
+	///
+	/// # Example
+	/// 
+	/// ```
+    /// use gw_signal::timeseries::*;
+	/// 	
+    /// 
+    /// // creates a white noise signal
+    /// let signal_f32: TimeSeries<f32> = TimeSeries::white_noise(20000, 1e3, 0f32, 1f32);
+	/// let signal_f64: TimeSeries<f64> = signal_f32.to_f64();
+	/// ```
+	fn to_f64(&self) -> TimeSeries<f64>;
+	/// Transform time series into a time series of Complex<f32>. Copy the data vector
+	///
+	/// # Example
+	/// 
+	/// ```
+    /// use gw_signal::timeseries::*;
+	/// 	
+    /// 
+    /// // creates a white noise signal
+    /// let signal_f64: TimeSeries<f64> = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
+	/// let signal_c32: TimeSeries<Complex<f32>> = signal_f64.to_c32();
+	/// ```
+	fn to_c32(&self) -> TimeSeries<Complex<f32>>;
+	/// Transform time series into a time series of Complex<f32>. Copy the data vector
+	///
+	/// # Example
+	/// 
+	/// ```
+    /// use gw_signal::timeseries::*;
+	/// 	
+    /// 
+    /// // creates a white noise signal
+    /// let signal_f64: TimeSeries<f64> = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
+	/// let signal_c64: TimeSeries<Complex<f64>> = signal_f64.to_c64();
+	/// ```
+	fn to_c64(&self) -> TimeSeries<Complex<f64>>;
+}
+impl ToType for TimeSeries<f32> {
+	fn to_f32(&self) -> TimeSeries<f32> {
+		self.clone()
+	}
+	fn to_f64(&self) -> TimeSeries<f64> {
+		// initialize data vector
+		let mut data: Vec<f64> = Vec::new();
+		for i in 0..self.get_size() {
+			data.push(self[i] as f64);
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+	fn to_c32(&self) -> TimeSeries<Complex<f32>> {
+		// initialize data vector
+		let mut data: Vec<Complex<f32>> = Vec::new();
+		for i in 0..self.get_size() {
+			data.push(Complex{re:self[i], im: 0f32});
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+	fn to_c64(&self) -> TimeSeries<Complex<f64>> {
+		// initialize data vector
+		let mut data: Vec<Complex<f64>> = Vec::new();
+		for i in 0..self.get_size() {
+			data.push(Complex{re:self[i] as f64, im: 0f64});
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+}
+impl ToType for TimeSeries<f64> {
+	fn to_f32(&self) -> TimeSeries<f32> {
+		// initialize data vector
+		let mut data: Vec<f32> = Vec::new();
+		for i in 0..self.get_size() {
+			if self[i].abs() < f32::MAX as f64 {
+				data.push(self[i] as f32);
+			} else {
+				data.push(f32::MAX * self[i].signum() as f32);
+			}
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+	fn to_f64(&self) -> TimeSeries<f64> {
+		self.clone()
+	}
+	fn to_c32(&self) -> TimeSeries<Complex<f32>> {
+		// initialize data vector
+		let mut data: Vec<Complex<f32>> = Vec::new();
+		for i in 0..self.get_size() {
+			if self[i].abs() < f32::MAX as f64 {
+				data.push(Complex{re: self[i] as f32, im: 0f32});
+			} else {
+				data.push(Complex{re: f32::MAX * self[i].signum() as f32, im: 0f32});
+			}
+
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+	fn to_c64(&self) -> TimeSeries<Complex<f64>> {
+		// initialize data vector
+		let mut data: Vec<Complex<f64>> = Vec::new();
+		for i in 0..self.get_size() {
+			data.push(Complex{re:self[i], im: 0f64});
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+}
+impl ToType for TimeSeries<Complex<f32>> {
+	fn to_f32(&self) -> TimeSeries<f32> {
+		// initialize data vector
+		let mut data: Vec<f32> = Vec::new();
+		for i in 0..self.get_size() {
+			data.push(self[i].re);
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+	fn to_f64(&self) -> TimeSeries<f64> {
+		// initialize data vector
+		let mut data: Vec<f64> = Vec::new();
+		for i in 0..self.get_size() {
+			data.push(self[i].re as f64);
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+	fn to_c32(&self) -> TimeSeries<Complex<f32>> {
+		self.clone()
+	}
+	fn to_c64(&self) -> TimeSeries<Complex<f64>> {
+		// initialize data vector
+		let mut data: Vec<Complex<f64>> = Vec::new();
+		for i in 0..self.get_size() {
+			data.push(Complex{re: self[i].re as f64, im: self[i].im as f64});
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+}
+impl ToType for TimeSeries<Complex<f64>> {
+	fn to_f32(&self) -> TimeSeries<f32> {
+		// initialize data vector
+		let mut data: Vec<f32> = Vec::new();
+		for i in 0..self.get_size() {
+			if self[i].abs() < f32::MAX as f64 {
+				data.push(self[i].re as f32);
+			} else {
+				data.push(f32::MAX * self[i].re.signum() as f32);
+			}
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+	fn to_f64(&self) -> TimeSeries<f64> {
+		// initialize data vector
+		let mut data: Vec<f64> = Vec::new();
+		for i in 0..self.get_size() {
+			data.push(self[i].re);
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+
+	}
+	fn to_c32(&self) -> TimeSeries<Complex<f32>> {
+		// initialize data vector
+		let mut data: Vec<Complex<f32>> = Vec::new();
+		for i in 0..self.get_size() {
+			let (real, imag): (f32, f32);
+			if self[i].re.abs() < f32::MAX as f64 {
+				real = self[i].re as f32;
+			} else {
+				real = f32::MAX * self[i].re.signum() as f32;
+			}
+			if self[i].im.abs() < f32::MAX as f64 {
+				imag = self[i].im as f32;
+			} else {
+				imag = f32::MAX * self[i].im.signum() as f32;
+			}
+			data.push(Complex{re: real, im: imag});
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}
+	}
+	fn to_c64(&self) -> TimeSeries<Complex<f64>> {
+		self.clone()
+	}
+}
+
+
+
+/* --------------------------------------------------------------------------------------------- */
 /// Operator overloading:
 /// 
 /// notes:

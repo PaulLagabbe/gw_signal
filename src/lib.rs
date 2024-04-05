@@ -34,7 +34,7 @@ use plotters::prelude::*;
 /* --------------------------------------------------------------------------------------------- *
  * Constructors
  * --------------------------------------------------------------------------------------------- */
-
+/// Spectral analysis methods
 impl<D> TimeSeries<D> 
 	where D: ComplexFloat + AddAssign + SubAssign + MulAssign + DivAssign + Data,
 {
@@ -50,11 +50,12 @@ impl<D> TimeSeries<D>
 	/// };
 	///
 	/// // creates two white noise signals
+	/// let window: win::Window = win::hann(1., 0.5, 1e3);
 	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1.);
 	/// let mut signal_2: ts::TimeSeries = signal_1.clone * 2.;
 	///
 	/// // compute the csd
-	/// let csv: fs::FrequencySeries = signal_1.csd(signal_2, 1., 0.5, win::hann);
+	/// let csv: fs::FrequencySeries = signal_1.csd(signal_2, window);
 	/// 
 	/// ```
 	pub fn csd(
@@ -108,10 +109,11 @@ impl<D> TimeSeries<D>
 	/// };
 	///
 	/// // creates two white noise signals
+	/// let window: win::Window = win::hann(1., 0.5, 1e3);
 	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1.);
 	///
 	/// // compute the csd
-	/// let psv: fs::FrequencySeries = signal_1.psd(1., 0.5, win::hann);
+	/// let psv: fs::FrequencySeries = signal_1.psd(window);
 	/// 
 	/// ```
 
@@ -134,13 +136,13 @@ impl<D> TimeSeries<D>
 	/// };
 	///
 	/// // creates two white noise signals
+	/// let window: win::Window = win::hann(1., 0.5, 1e3);
 	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1.);
 	///
 	/// // compute the csd
-	/// let asd: fs::FrequencySeries = signal_1.asd(1., 0.5, win::hann);
+	/// let asd: fs::FrequencySeries = signal_1.asd(window);
 	/// 
 	/// ```
-
 	pub fn asd(
 		&self,
 		window: &Window) -> FrequencySeries {
@@ -159,11 +161,12 @@ impl<D> TimeSeries<D>
 	/// };
 	///
 	/// // creates two white noise signals
+	/// let window: win::Window = win::hann(1., 0.5, 1e3);
 	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1.);
 	/// let mut signal_2: ts::TimeSeries = signal_1.clone() * 2.;
 	///
 	/// // compute the csd
-	/// let coherence: fs::FrequencySeries = signal_1.coherence(signal_2, 1., 0.5, win::hann);
+	/// let coherence: fs::FrequencySeries = signal_1.coherence(signal_2, window);
 	/// 
 	/// ```
 	pub fn coherence(
@@ -188,11 +191,12 @@ impl<D> TimeSeries<D>
 	/// };
 	///
 	/// // creates two white noise signals
+	/// let window: win::Window = win::hann(1., 0.5, 1e3);
 	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1.);
 	/// let mut signal_2: ts::TimeSeries = signal_1.clone() * 2.;
 	///
 	/// // compute the csd
-	/// let transfer_function: fs::FrequencySeries = signal_1.transfer_function(signal_2, 1., 0.5, win::hann);
+	/// let transfer_function: fs::FrequencySeries = signal_1.transfer_function(signal_2, window);
 	/// 
 	/// ```
 	pub fn transfer_function(
@@ -206,7 +210,15 @@ impl<D> TimeSeries<D>
 	}
 
 
+}
+
 /* --------------------------------------------------------------------------------------------- */
+
+/// Implement signal filtering
+impl<D> TimeSeries<D> 
+	where D: ComplexFloat + AddAssign + SubAssign + MulAssign + DivAssign + Data,
+{
+
 	/// The following method apply an IIR filter to a time series
 	/// modify the original time series object.
 	/// # Example	
@@ -227,7 +239,6 @@ impl<D> TimeSeries<D>
 	/// let mut signal_2: ts::TimeSeries = signal_1.apply_filter(butter);
 	///
 	/// ```
-
 	pub fn apply_filter(&mut self, mut flt: Filter) {
 		
 		assert!((1. - self.get_fs() / flt.get_fs()).abs() < 1e-10);
@@ -681,8 +692,7 @@ impl Plot for FrequencySeries {
 
 /// 
 impl Filter {
-
-
+	/// Compute frequency response of the filter
 	pub fn frequency_response(&self, size: usize) -> FrequencySeries {
 
 		// warp frequencies
