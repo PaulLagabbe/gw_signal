@@ -236,7 +236,24 @@ impl Filter {
 
 		self.gain *= gain;
 	}
+	/// Set the gain value at a specific frequency
+	pub fn set_gain_at_frequency(&mut self, gain: f64, frequency: f64) {
 
+		// compute filter gain the given frequency
+		assert!((frequency > 0.) & (frequency < self.fs/2.));
+		
+		let mut response: Complex<f64> = Complex{re: 1f64, im: 0f64};
+		// apply zeros
+		for z in self.zeros.iter() {
+			response *= Complex{re: 0., im: frequency} - z
+		}
+		// apply poles
+		for p in self.poles.iter() {
+			response /= Complex{re: 0., im: frequency} - p
+		}
+
+		self.gain = gain / response.norm();
+	}
 	/// Add a first order pole at the given cutoff frequency 
 	/// ```math
 	/// H(s) = \frac{1}{1 + \frac{s}{2 \pi fc}}
@@ -298,7 +315,7 @@ impl Filter {
 	/// ```math 
 	/// H(s) = 1 + \frac{s}{q 2 \pi fc} + \left(\frac{s}{2 \pi fc}\right)^2
 	/// ```
-	pub fn add_zeros_2(&mut self, fc: f64, q: f64) {
+	pub fn add_zero_2(&mut self, fc: f64, q: f64) {
 		
 		let sum: f64 = PI * fc / q;
 		let root: Complex<f64>;
