@@ -7,8 +7,6 @@ use num::{Float, Complex, complex::ComplexFloat};
 pub trait Data: ComplexFloat {
 	type Base;
 
-	/// Multiply by a f64 factor
-    fn scale(self, slope: f64) -> Self;
 	/// Cast into a String
 	fn to_str(self, time: f64) -> String;
 	/// Read a String and return the value in the appropriate type
@@ -19,9 +17,6 @@ pub trait Data: ComplexFloat {
 impl Data for f32 {
 	type Base = f32;
 
-    fn scale(self, slope: f64) -> Self {
-        self * (slope as f32)
-    }
 	fn to_str(self, time: f64) -> String {
 		format!("{},{}", time, self).to_string()
 	}
@@ -43,9 +38,6 @@ impl Data for f32 {
 impl Data for f64 {
 	type Base = f64;
 
-    fn scale(self, slope: f64) -> Self {
-        self * slope
-    }
 	fn to_str(self, time: f64) -> String {
 		format!("{},{}", time, self).to_string()
 	}
@@ -68,9 +60,6 @@ impl Data for f64 {
 impl Data for Complex<f32> {
 	type Base = f32;
 
-    fn scale(self, slope: f64) -> Self {
-        self * Complex{re: slope as f32, im: 0f32}
-    }
 	fn to_str(self, time: f64) -> String {
 		format!("{},{},{}", time, self.re, self.im).to_string()
 	}
@@ -101,9 +90,6 @@ impl Data for Complex<f32> {
 impl Data for Complex<f64> {
 	type Base = f64;
 
-    fn scale(self, slope: f64) -> Self {
-        self * Complex{re: slope, im: 0f64}
-    }
 	fn to_str(self, time: f64) -> String {
 		format!("{},{},{}", time, self.re, self.im).to_string()
 	}

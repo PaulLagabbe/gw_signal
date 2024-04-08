@@ -297,59 +297,15 @@ pub trait ToType {
 	/// ```
 	fn to_c64(&self) -> TimeSeries<Complex<f64>>;
 }
-impl ToType for TimeSeries<f32> {
-	fn to_f32(&self) -> TimeSeries<f32> {
-		self.clone()
-	}
-	fn to_f64(&self) -> TimeSeries<f64> {
-		// initialize data vector
-		let mut data: Vec<f64> = Vec::new();
-		for i in 0..self.get_size() {
-			data.push(self[i] as f64);
-		}
-		// return option with vector in it
-		TimeSeries{
-			fs: self.fs,
-			t0: self.t0,
-			data: data
-		}
-	}
-	fn to_c32(&self) -> TimeSeries<Complex<f32>> {
-		// initialize data vector
-		let mut data: Vec<Complex<f32>> = Vec::new();
-		for i in 0..self.get_size() {
-			data.push(Complex{re:self[i], im: 0f32});
-		}
-		// return option with vector in it
-		TimeSeries{
-			fs: self.fs,
-			t0: self.t0,
-			data: data
-		}
-	}
-	fn to_c64(&self) -> TimeSeries<Complex<f64>> {
-		// initialize data vector
-		let mut data: Vec<Complex<f64>> = Vec::new();
-		for i in 0..self.get_size() {
-			data.push(Complex{re:self[i] as f64, im: 0f64});
-		}
-		// return option with vector in it
-		TimeSeries{
-			fs: self.fs,
-			t0: self.t0,
-			data: data
-		}
-	}
-}
-impl ToType for TimeSeries<f64> {
-	fn to_f32(&self) -> TimeSeries<f32> {
+impl<D: ComplexFloat<Real = F>, F: Float> TimeSeries<D> {
+	pub fn to_f32(&self) -> TimeSeries<f32> {
 		// initialize data vector
 		let mut data: Vec<f32> = Vec::new();
 		for i in 0..self.get_size() {
-			if self[i].abs() < f32::MAX as f64 {
-				data.push(self[i] as f32);
-			} else {
-				data.push(f32::MAX * self[i].signum() as f32);
+			let sign: f32 = self[i].re().signum().to_f32().unwrap();
+			match self[i].re().to_f32() {
+				Some(x) => data.push(x),
+				None => data.push(f32::MAX * sign),
 			}
 		}
 		// return option with vector in it
@@ -359,60 +315,11 @@ impl ToType for TimeSeries<f64> {
 			data: data
 		}
 	}
-	fn to_f64(&self) -> TimeSeries<f64> {
-		self.clone()
-	}
-	fn to_c32(&self) -> TimeSeries<Complex<f32>> {
-		// initialize data vector
-		let mut data: Vec<Complex<f32>> = Vec::new();
-		for i in 0..self.get_size() {
-			if self[i].abs() < f32::MAX as f64 {
-				data.push(Complex{re: self[i] as f32, im: 0f32});
-			} else {
-				data.push(Complex{re: f32::MAX * self[i].signum() as f32, im: 0f32});
-			}
-
-		}
-		// return option with vector in it
-		TimeSeries{
-			fs: self.fs,
-			t0: self.t0,
-			data: data
-		}
-	}
-	fn to_c64(&self) -> TimeSeries<Complex<f64>> {
-		// initialize data vector
-		let mut data: Vec<Complex<f64>> = Vec::new();
-		for i in 0..self.get_size() {
-			data.push(Complex{re:self[i], im: 0f64});
-		}
-		// return option with vector in it
-		TimeSeries{
-			fs: self.fs,
-			t0: self.t0,
-			data: data
-		}
-	}
-}
-impl ToType for TimeSeries<Complex<f32>> {
-	fn to_f32(&self) -> TimeSeries<f32> {
-		// initialize data vector
-		let mut data: Vec<f32> = Vec::new();
-		for i in 0..self.get_size() {
-			data.push(self[i].re);
-		}
-		// return option with vector in it
-		TimeSeries{
-			fs: self.fs,
-			t0: self.t0,
-			data: data
-		}
-	}
-	fn to_f64(&self) -> TimeSeries<f64> {
+	pub fn to_f64(&self) -> TimeSeries<f64> {
 		// initialize data vector
 		let mut data: Vec<f64> = Vec::new();
 		for i in 0..self.get_size() {
-			data.push(self[i].re as f64);
+			data.push(self[i].re().to_f64().unwrap());
 		}
 		// return option with vector in it
 		TimeSeries{
@@ -421,69 +328,20 @@ impl ToType for TimeSeries<Complex<f32>> {
 			data: data
 		}
 	}
-	fn to_c32(&self) -> TimeSeries<Complex<f32>> {
-		self.clone()
-	}
-	fn to_c64(&self) -> TimeSeries<Complex<f64>> {
-		// initialize data vector
-		let mut data: Vec<Complex<f64>> = Vec::new();
-		for i in 0..self.get_size() {
-			data.push(Complex{re: self[i].re as f64, im: self[i].im as f64});
-		}
-		// return option with vector in it
-		TimeSeries{
-			fs: self.fs,
-			t0: self.t0,
-			data: data
-		}
-	}
-}
-impl ToType for TimeSeries<Complex<f64>> {
-	fn to_f32(&self) -> TimeSeries<f32> {
-		// initialize data vector
-		let mut data: Vec<f32> = Vec::new();
-		for i in 0..self.get_size() {
-			if self[i].abs() < f32::MAX as f64 {
-				data.push(self[i].re as f32);
-			} else {
-				data.push(f32::MAX * self[i].re.signum() as f32);
-			}
-		}
-		// return option with vector in it
-		TimeSeries{
-			fs: self.fs,
-			t0: self.t0,
-			data: data
-		}
-	}
-	fn to_f64(&self) -> TimeSeries<f64> {
-		// initialize data vector
-		let mut data: Vec<f64> = Vec::new();
-		for i in 0..self.get_size() {
-			data.push(self[i].re);
-		}
-		// return option with vector in it
-		TimeSeries{
-			fs: self.fs,
-			t0: self.t0,
-			data: data
-		}
-
-	}
-	fn to_c32(&self) -> TimeSeries<Complex<f32>> {
+	pub fn to_c32(&self) -> TimeSeries<Complex<f32>> {
 		// initialize data vector
 		let mut data: Vec<Complex<f32>> = Vec::new();
 		for i in 0..self.get_size() {
 			let (real, imag): (f32, f32);
-			if self[i].re.abs() < f32::MAX as f64 {
-				real = self[i].re as f32;
-			} else {
-				real = f32::MAX * self[i].re.signum() as f32;
+			let sign_real: f32 = self[i].re().signum().to_f32().unwrap();
+			let sign_imag: f32 = self[i].im().signum().to_f32().unwrap();
+			match self[i].re().to_f32() {
+				Some(x) => {real = x;},
+				None => {real = f32::MAX * sign_real;},
 			}
-			if self[i].im.abs() < f32::MAX as f64 {
-				imag = self[i].im as f32;
-			} else {
-				imag = f32::MAX * self[i].im.signum() as f32;
+			match self[i].im().to_f32() {
+				Some(x) => {imag = x;},
+				None => {imag = f32::MAX * sign_imag;},
 			}
 			data.push(Complex{re: real, im: imag});
 		}
@@ -494,12 +352,23 @@ impl ToType for TimeSeries<Complex<f64>> {
 			data: data
 		}
 	}
-	fn to_c64(&self) -> TimeSeries<Complex<f64>> {
-		self.clone()
+	pub fn to_c64(&self) -> TimeSeries<Complex<f64>> {
+		// initialize data vector
+		let mut data: Vec<Complex<f64>> = Vec::new();
+		for i in 0..self.get_size() {
+			data.push(Complex{
+				re: self[i].re().to_f64().unwrap(),
+				im: self[i].im().to_f64().unwrap()
+			});
+		}
+		// return option with vector in it
+		TimeSeries{
+			fs: self.fs,
+			t0: self.t0,
+			data: data
+		}	
 	}
 }
-
-
 
 /* --------------------------------------------------------------------------------------------- */
 /// Operator overloading:

@@ -6,10 +6,12 @@ pub mod timeseries;
 pub mod frequencyseries;
 pub mod filters;
 pub mod windows;
+pub mod plot;
+
 
 use std::{
 	str::FromStr,
-	f64::consts::PI,
+	//f64::consts::PI,
 	fmt::Display,
 	fs::File,
 	io::BufReader,
@@ -22,11 +24,11 @@ use crate::{
 	frequencyseries::FrequencySeries,
 	filters::Filter,
 	windows::Window,
+	plot::{RealPlot, ComplexPlot}
 };
 use rustfft::FftPlanner;
-use num::{Complex, complex::ComplexFloat, NumCast};
+use num::{Complex, complex::ComplexFloat, Float};
 use std::ops::{AddAssign, SubAssign, MulAssign, DivAssign};
-use plotters::prelude::*;
 //use more_asserts as ma;
 
 
@@ -239,9 +241,10 @@ impl<D> TimeSeries<D>
 	/// let mut signal_2: ts::TimeSeries = signal_1.apply_filter(butter);
 	///
 	/// ```
-	pub fn apply_filter(&mut self, mut flt: Filter) {
+	pub fn apply_filter(&mut self, input_filter: &Filter) {
 		
-		assert!((1. - self.get_fs() / flt.get_fs()).abs() < 1e-10);
+		assert!((1. - self.get_fs() / input_filter.get_fs()).abs() < 1e-10);
+		let mut flt: Filter = input_filter.clone();
 		// warp frequencies
 		flt.adapt_frequencies(true);
 		// compute bilinear transform of the filter, the filter is now in the z-space
@@ -265,14 +268,14 @@ impl<D> TimeSeries<D>
 		let mut y: Vec<D> = x.clone();
 
 		for i in 0..self.get_size() {
-			let mut temp_y: D = NumCast::from(0).unwrap();
+			let mut temp_y: D = D::zero();
 			for j in 0..b.len() {
-				temp_y += x[i + b.len()-1 - j].scale(b[j]);
+				temp_y += x[i + b.len()-1 - j] * D::from(b[j]).unwrap();
 			}
 			for j in 1..a.len() {
-				temp_y -= y[i + a.len()-1 - j].scale(a[j]);
+				temp_y -= y[i + a.len()-1 - j] * D::from(a[j]).unwrap();
 			}
-			temp_y = temp_y.scale(1./a[0]);
+			temp_y /= D::from(a[0]).unwrap();
 			self[i] = temp_y;
 			y[i+a.len()-1] = temp_y;
 		}
@@ -448,6 +451,65 @@ impl SeriesIO for FrequencySeries {
  * Plot time series
  * --------------------------------------------------------------------------------------------- */
 
+impl RealPlot {
+	/// Add one time series to the plot
+	pub fn add_timeseries<D, F>(&mut self, series: &TimeSeries<D>) 
+		where D: ComplexFloat<Real = F>, F: Float,
+	{
+		
+		// build time axis
+		let mut time: Vec<f64> = Vec::new();
+		for i in 0..series.get_size() {
+			time.push(series.get_t0() + (i as f64) / series.get_fs());
+		}
+		self.add_data_vector(time, series.to_f64().get_data());
+	}
+
+	pub fn add_frequencyseries(&mut self, series: &FrequencySeries) {
+		
+		// build time axis
+		let mut time: Vec<f64> = Vec::new();
+		let mut real_data: Vec<f64> = Vec::new();
+		for i in 1..series.get_size() {
+			time.push((i as f64) / ((series.get_size() - 1) as f64) * series.get_f_max());
+			real_data.push(series[i].re);
+		}
+		self.add_data_vector(time, real_data);
+		self.set_x_scale_to_log(true);
+	}
+
+}
+impl ComplexPlot {
+
+	/// Add one time series to the plot
+	pub fn add_timeseries<D, F>(&mut self, series: &TimeSeries<D>) 
+		where D: ComplexFloat<Real = F>, F: Float,
+	{
+		
+		// build time axis
+		let mut time: Vec<f64> = Vec::new();
+		for i in 0..series.get_size() {
+			time.push(series.get_t0() + (i as f64) / series.get_fs());
+		}
+		self.add_data_vector(time, series.to_c64().get_data());
+	}
+
+	pub fn add_frequencyseries(&mut self, series: &FrequencySeries) {
+		
+		// build time axis
+		let mut time: Vec<f64> = Vec::new();
+		let mut data: Vec<Complex<f64>> = Vec::new();
+		for i in 1..series.get_size() {
+			time.push((i as f64) / ((series.get_size() - 1) as f64) * series.get_f_max());
+			data.push(series[i]);
+		}
+		self.add_data_vector(time, data);
+		self.set_x_scale_to_log(true);
+		self.set_y_scale_to_log(true);
+	}
+
+}
+/*
 /// Draw time and frequency series
 /// If the series is real, draw one canvas
 /// If the series is complex, the canvas is splitted into the modulus and phase
@@ -475,15 +537,14 @@ impl Plot for TimeSeries<f32> {
 		let (y_min, y_max) = (self.real().min(), self.real().max());
 		
 		// define white canvas
-		let drawing_area = BitMapBackend::new(name, (1365, 768)).into_drawing_area();
+		let drawing_area = SVGBackend::new(name, (1365, 768)).into_drawing_area();
 		drawing_area.fill(&WHITE).unwrap();
 		
 		// define canvas features
 		let mut ctx = ChartBuilder::on(&drawing_area)
 			.margin(20)
 			// axis
-			.set_label_area_size(LabelAreaPosition::Left, 50)
-			.set_label_area_size(LabelAreaPosition::Bottom, 50)
+			.set_left_and_bottom_label_area_size(64)
 			// grid
 			.build_cartesian_2d(x_max..x_min, y_min..y_max)
 			.unwrap();
@@ -504,15 +565,14 @@ impl Plot for TimeSeries<f64> {
 		let (y_min, y_max) = (self.real().min(), self.real().max());
 	
 		// define white canvas
-		let drawing_area = BitMapBackend::new(name, (1365, 768)).into_drawing_area();
+		let drawing_area = SVGBackend::new(name, (1365, 768)).into_drawing_area();
 		drawing_area.fill(&WHITE).unwrap();
 		
 		// define canvas features
 		let mut ctx = ChartBuilder::on(&drawing_area)
 			.margin(20)
 			// axis
-			.set_label_area_size(LabelAreaPosition::Left, 100)
-			.set_label_area_size(LabelAreaPosition::Bottom, 100)
+			.set_left_and_bottom_label_area_size(64)
 			// caption
 			.caption("Timeseries",("sans-serif", 40))
 			// grid
@@ -532,7 +592,7 @@ impl Plot for TimeSeries<Complex<f32>> {
 	fn plot(&self, name: &str) {
 		
 		// define white canvas
-		let drawing_area = BitMapBackend::new(name, (1365, 768)).into_drawing_area();
+		let drawing_area = SVGBackend::new(name, (1365, 768)).into_drawing_area();
 		drawing_area.fill(&WHITE).unwrap();
 		let (top, bottom) = drawing_area.split_vertically(128);
 		
@@ -544,8 +604,7 @@ impl Plot for TimeSeries<Complex<f32>> {
 		let mut ctx = ChartBuilder::on(&top)
 			.margin(20)
 			// axis
-			.set_label_area_size(LabelAreaPosition::Left, 64)
-			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			.set_left_and_bottom_label_area_size(64)
 			// grid
 			.build_cartesian_2d(x_max..x_min, y_min..y_max)
 			.unwrap();
@@ -564,8 +623,7 @@ impl Plot for TimeSeries<Complex<f32>> {
 		let mut ctx = ChartBuilder::on(&bottom)
 			.margin(20)
 			// axis
-			.set_label_area_size(LabelAreaPosition::Left, 64)
-			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			.set_left_and_bottom_label_area_size(64)
 			// grid
 			.build_cartesian_2d(x_max..x_min, y_min..y_max)
 			.unwrap();
@@ -583,7 +641,7 @@ impl Plot for TimeSeries<Complex<f64>> {
 	fn plot(&self, name: &str) {
 		
 		// define white canvas
-		let drawing_area = BitMapBackend::new(name, (1365, 768)).into_drawing_area();
+		let drawing_area = SVGBackend::new(name, (1365, 768)).into_drawing_area();
 		drawing_area.fill(&WHITE).unwrap();
 		let (top, bottom) = drawing_area.split_vertically(384);
 		
@@ -596,8 +654,7 @@ impl Plot for TimeSeries<Complex<f64>> {
 		let mut ctx = ChartBuilder::on(&top)
 			.margin(20)
 			// axis
-			.set_label_area_size(LabelAreaPosition::Left, 64)
-			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			.set_left_and_bottom_label_area_size(64)
 			// grid
 			.build_cartesian_2d(x_max..x_min, y_min..y_max)
 			.unwrap();
@@ -616,8 +673,7 @@ impl Plot for TimeSeries<Complex<f64>> {
 		let mut ctx = ChartBuilder::on(&bottom)
 			.margin(20)
 			// axis
-			.set_label_area_size(LabelAreaPosition::Left, 64)
-			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			.set_left_and_bottom_label_area_size(64)
 			// grid
 			.build_cartesian_2d(x_max..x_min, y_min..y_max)
 			.unwrap();
@@ -636,7 +692,7 @@ impl Plot for FrequencySeries {
 	fn plot(&self, name: &str) {
 		
 		// define white canvas
-		let drawing_area = BitMapBackend::new(name, (1365, 768)).into_drawing_area();
+		let drawing_area = SVGBackend::new(name, (1365, 768)).into_drawing_area();
 		drawing_area.fill(&WHITE).unwrap();
 		let (top, bottom) = drawing_area.split_vertically(384);
 		
@@ -649,8 +705,7 @@ impl Plot for FrequencySeries {
 		let mut ctx = ChartBuilder::on(&top)
 			.margin(20)
 			// axis
-			.set_label_area_size(LabelAreaPosition::Left, 64)
-			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			.set_left_and_bottom_label_area_size(64)
 			// grid
 			.build_cartesian_2d((x_min..x_max).log_scale(), (y_min..y_max).log_scale())
 			.unwrap();
@@ -669,8 +724,7 @@ impl Plot for FrequencySeries {
 		let mut ctx = ChartBuilder::on(&bottom)
 			.margin(20)
 			// axis
-			.set_label_area_size(LabelAreaPosition::Left, 64)
-			.set_label_area_size(LabelAreaPosition::Bottom, 64)
+			.set_left_and_bottom_label_area_size(64)
 			// grid
 			.build_cartesian_2d((x_min..x_max).log_scale(), y_min..y_max)
 			.unwrap();
@@ -684,7 +738,7 @@ impl Plot for FrequencySeries {
 
 	}
 }
-
+*/
 
 /* --------------------------------------------------------------------------------------------- *
  * Filter methods
