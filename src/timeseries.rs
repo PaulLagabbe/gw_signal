@@ -1,15 +1,12 @@
 /* --------------------------------------------------------------------------------------------- *
  * Time series and frequency series definition
  * --------------------------------------------------------------------------------------------- */
-pub mod data;
-
 use rand::thread_rng;
 use rand_distr::{Normal, StandardNormal, Distribution};
 use std::f64::consts::PI;
 use std::ops::{Add, AddAssign, Neg, Sub, SubAssign, Mul, MulAssign, Div, DivAssign, Index, IndexMut};
 use more_asserts::assert_gt;
 use num::{Float, Complex, complex::ComplexFloat, NumCast};
-use data::Data;
 
 
 /* --------------------------------------------------------------------------------------------- *
@@ -27,7 +24,7 @@ pub struct TimeSeries<D> {
 
 
 
-impl<D: ComplexFloat + Float + Data> TimeSeries<D> {
+impl<D: ComplexFloat + Float> TimeSeries<D> {
     /// Real signal generators:
     /// 
     /// Generates a white noise signal with a given size, sampling frequency and the noise amplitude
@@ -56,7 +53,7 @@ impl<D: ComplexFloat + Float + Data> TimeSeries<D> {
         TimeSeries::from_vector(fs, 0., data_vec)
     }
 }
-impl<D: ComplexFloat + Data> TimeSeries<D> {
+impl<D: ComplexFloat> TimeSeries<D> {
     /// Generates a sinusoidal signal.
     /// 
     /// # Examples
@@ -141,6 +138,23 @@ impl<D: ComplexFloat<Real = F>, F> TimeSeries<D> {
 	pub fn get_data(&self) -> Vec<D> {
 		self.data.clone()
 	}
+	/// extract a sub time series
+	pub fn get_subts(&self, start: usize, end: usize) -> TimeSeries<D> {
+		
+		let t0: f64 = self.t0 + (start as f64 / self.fs);
+		let fs = self.fs;
+		let mut data: Vec<D> = Vec::new();
+		let mut i: usize = start;
+		while (i < end) & (i < self.get_size()) {
+			data.push(self.data[i]);
+			i += 1;
+		}
+		TimeSeries{
+			fs,
+			t0,
+			data,
+		}
+	}
 }
 
 /// Math functions
@@ -209,6 +223,15 @@ impl<D: ComplexFloat<Real = F>, F> TimeSeries<D> {
 			data: output
 		}
 	}
+	/// Compute mean value of the time series
+	pub fn mean(&self) -> D {
+		let mut output: D = D::zero();
+		for value in self.data.iter() {
+			output = output + *value;
+		}
+		output = output / D::from(self.get_size()).unwrap();
+		output
+	}
 }
 
 /// Math functions for real time series
@@ -235,6 +258,7 @@ impl<D: Float> TimeSeries<D> {
 		}
 		output
 	}
+
 }
 
 

@@ -4,13 +4,15 @@
 
 pub mod timeseries;
 pub mod frequencyseries;
+pub mod spectrogram;
 pub mod filters;
 pub mod windows;
-pub mod plot;
+//pub mod plot;
 
 
 use std::{
 	str::FromStr,
+	string::ToString,
 	//f64::consts::PI,
 	fmt::Display,
 	fs::File,
@@ -20,14 +22,14 @@ use std::{
 
 use crate::{
 	timeseries::TimeSeries,
-	timeseries::data::Data,
 	frequencyseries::FrequencySeries,
+	spectrogram::Spectrogram,
 	filters::Filter,
 	windows::Window,
-	plot::{RealPlot, ComplexPlot}
+//	plot::{RealPlot, ComplexPlot}
 };
 use rustfft::FftPlanner;
-use num::{Complex, complex::ComplexFloat, Float};
+use num::{Complex, complex::ComplexFloat};
 use std::ops::{AddAssign, SubAssign, MulAssign, DivAssign};
 //use more_asserts as ma;
 
@@ -38,7 +40,7 @@ use std::ops::{AddAssign, SubAssign, MulAssign, DivAssign};
  * --------------------------------------------------------------------------------------------- */
 /// Spectral analysis methods
 impl<D> TimeSeries<D> 
-	where D: ComplexFloat + AddAssign + SubAssign + MulAssign + DivAssign + Data,
+	where D: ComplexFloat + AddAssign + SubAssign + MulAssign + DivAssign,
 {
 
 	
@@ -47,17 +49,18 @@ impl<D> TimeSeries<D>
 	/// # Example
 	/// ```
 	/// use gw_signal::{
-	/// 	timeseries as ts,
-	/// 	windows as win,
+	/// 	timeseries::*,
+	/// 	frequencyseries::*,
+	/// 	windows::*,
 	/// };
 	///
 	/// // creates two white noise signals
-	/// let window: win::Window = win::hann(1., 0.5, 1e3);
-	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1.);
-	/// let mut signal_2: ts::TimeSeries = signal_1.clone * 2.;
+	/// let window: Window = hann(1., 0.5, 1e3);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
+	/// let mut signal_2: TimeSeries = signal_1.clone * 2.;
 	///
 	/// // compute the csd
-	/// let csv: fs::FrequencySeries = signal_1.csd(signal_2, window);
+	/// let csd: FrequencySeries = signal_1.csd(&signal_2, &window);
 	/// 
 	/// ```
 	pub fn csd(
@@ -65,10 +68,15 @@ impl<D> TimeSeries<D>
 		other: &TimeSeries<D>,
 		window: &Window) -> FrequencySeries {
 	
+		assert_eq!(self.get_fs(), other.get_fs());
 		// initialize fft
 		let mut planner = FftPlanner::new();
 		let fft = planner.plan_fft_forward(window.get_size());
-
+		// compute the mean of each time series
+		let mut self_clone = &mut self.clone();
+		self_clone = self_clone - self.mean();
+		let mut other_clone = &mut other.clone();
+		other_clone = other_clone - other.mean();
 		// initialize frequency series
 		let mut temp_1: Vec<Complex<f64>>;
 		let mut temp_2: Vec<Complex<f64>>;
@@ -79,8 +87,8 @@ impl<D> TimeSeries<D>
 		let nb_fft: usize = window.nb_fft(self.get_size());
 		for i in 0..nb_fft {
 			// compute windowed data
-			temp_1 = window.get_windowed_data(self.get_data(), i);
-			temp_2 = window.get_windowed_data(other.get_data(), i);
+			temp_1 = window.get_windowed_data(self_clone.get_data(), i);
+			temp_2 = window.get_windowed_data(other_clone.get_data(), i);
 			// compute fft
 			fft.process(&mut temp_1); fft.process(&mut temp_2);
 			// compute product
@@ -106,19 +114,19 @@ impl<D> TimeSeries<D>
 	/// # Example
 	/// ```
 	/// use gw_signal::{
-	/// 	timeseries as ts,
-	/// 	windows as win,
+	/// 	timeseries::*,
+	/// 	frequencyseries::*,
+	/// 	windows::*,
 	/// };
 	///
 	/// // creates two white noise signals
-	/// let window: win::Window = win::hann(1., 0.5, 1e3);
-	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1.);
+	/// let window: Window = hann(1., 0.5, 1e3);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
 	///
 	/// // compute the csd
-	/// let psv: fs::FrequencySeries = signal_1.psd(window);
+	/// let psd: FrequencySeries = signal_1.psd(&window);
 	/// 
 	/// ```
-
 	pub fn psd(
 		&self,
 		window: &Window) -> FrequencySeries {
@@ -133,16 +141,17 @@ impl<D> TimeSeries<D>
 	/// # Example
 	/// ```
 	/// use gw_signal::{
-	/// 	timeseries as ts,
-	/// 	windows as win,
+	/// 	timeseries::*,
+	/// 	frequencyseries::*,
+	/// 	windows::*,
 	/// };
 	///
 	/// // creates two white noise signals
-	/// let window: win::Window = win::hann(1., 0.5, 1e3);
-	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1.);
+	/// let window: Window = hann(1., 0.5, 1e3);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
 	///
 	/// // compute the csd
-	/// let asd: fs::FrequencySeries = signal_1.asd(window);
+	/// let asd: FrequencySeries = signal_1.asd(&window);
 	/// 
 	/// ```
 	pub fn asd(
@@ -151,24 +160,24 @@ impl<D> TimeSeries<D>
 		
 		self.psd(window).sqrt()
 	}
-
 	/// Compute the coherence between two signals.
 	/// `\gamma_{1,2}(f) = \frac{|csd_{1,2}(f)|}{psd_1(f) \cdot psd_2(f)}`
 	/// 
 	/// # Example
 	/// ```
 	/// use gw_signal::{
-	/// 	timeseries as ts,
-	/// 	windows as win,
+	/// 	timeseries::*,
+	/// 	frequencyseries::*,
+	/// 	windows::*,
 	/// };
 	///
 	/// // creates two white noise signals
-	/// let window: win::Window = win::hann(1., 0.5, 1e3);
-	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1.);
-	/// let mut signal_2: ts::TimeSeries = signal_1.clone() * 2.;
+	/// let window: Window = hann(1., 0.5, 1e3);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
+	/// let mut signal_2: TimeSeries = signal_1.clone() * 2.;
 	///
 	/// // compute the csd
-	/// let coherence: fs::FrequencySeries = signal_1.coherence(signal_2, window);
+	/// let coherence: FrequencySeries = signal_1.coherence(&signal_2, &window);
 	/// 
 	/// ```
 	pub fn coherence(
@@ -188,17 +197,18 @@ impl<D> TimeSeries<D>
 	/// # Example
 	/// ```
 	/// use gw_signal::{
-	/// 	timeseries as ts,
-	/// 	windows as win,
+	/// 	timeseries::*,
+	/// 	frequencyseries::*,
+	/// 	windows::*,
 	/// };
 	///
 	/// // creates two white noise signals
-	/// let window: win::Window = win::hann(1., 0.5, 1e3);
-	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, 1e3, 1.);
-	/// let mut signal_2: ts::TimeSeries = signal_1.clone() * 2.;
+	/// let window: Window = hann(1., 0.5, 1e3);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
+	/// let mut signal_2: TimeSeries = signal_1.clone() * 2.;
 	///
 	/// // compute the csd
-	/// let transfer_function: fs::FrequencySeries = signal_1.transfer_function(signal_2, window);
+	/// let transfer_function: FrequencySeries = signal_1.transfer_function(&signal_2, &window);
 	/// 
 	/// ```
 	pub fn transfer_function(
@@ -211,14 +221,226 @@ impl<D> TimeSeries<D>
 		(&mut csd / &psd).clone()
 	}
 
+	/* ----------------------------------------------------------------------------------------- *
+	 * compute spectrogram
+	 * ----------------------------------------------------------------------------------------- */
+	/// Compute the cross spectal density between two signals, using the Welch's method
+	/// 
+	/// # Example
+	/// ```
+	/// use gw_signal::{
+	/// 	timeseries::*,
+	/// 	frequencyseries::*,
+	/// 	windows::*,
+	/// };
+	///
+	/// // creates two white noise signals
+	/// let window: Window = hann(1., 0.5, 1e3);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
+	/// let mut signal_2: TimeSeries = signal_1.clone() * 2.;
+	///
+	/// // compute the csd
+	/// let csd: Spectrogram = signal_1.time_csd(&signal_2, &window, 10.);
+	/// 
+	/// ```
+	pub fn time_csd(
+		&self,
+		other: &TimeSeries<D>,
+		window: &Window,
+		nb_fft: usize) -> Spectrogram {
 
+		let step: usize = window.get_size() - window.get_overlap();
+		let f_max: f64 = self.get_fs() / 2.;
+		// check if the number of fft is over 1 and below the maximum number of fft
+		assert!(nb_fft > 0);
+		assert!(nb_fft <= window.nb_fft(self.get_size()));
+		assert_eq!(self.get_fs(), other.get_fs());
+
+		// initialize fft
+		let mut planner = FftPlanner::new();
+		let fft = planner.plan_fft_forward(window.get_size());
+
+		// clone the time series and subtract their mean
+		let mut self_clone = &mut self.clone();
+		self_clone = self_clone - self.mean();
+		let mut other_clone = &mut other.clone();
+		other_clone = other_clone - other.mean();
+
+		// compute all frequency series and put them into a vector
+		let mut temp_1: Vec<Complex<f64>>;
+		let mut temp_2: Vec<Complex<f64>>;
+
+		let mut temp_series: &mut FrequencySeries = &mut FrequencySeries::from_vector(
+			f_max, vec![Complex{ re: 0.0f64, im: 0.0f64 }; window.get_size() / 2 + 1]);
+		let mut series_vec: Vec<FrequencySeries> = Vec::new();
+
+		for i in 0..window.nb_fft(self.get_size()) {
+			temp_series.set_to_zero();
+			// compute windowed data
+			temp_1 = window.get_windowed_data(self_clone.get_data(), i);
+			temp_2 = window.get_windowed_data(other_clone.get_data(), i);
+			// compute fft
+			fft.process(&mut temp_1); fft.process(&mut temp_2);
+			// compute product and add result into the frequency series vector
+			temp_series = temp_series +
+				&*( &mut FrequencySeries::from_vector(
+					f_max, 
+					temp_1[0..(window.get_size() / 2 + 1)].to_vec().clone()
+				).conj()
+				* &FrequencySeries::from_vector(
+					f_max,
+					temp_2[0..(window.get_size() / 2 + 1)].to_vec().clone()
+				) / (f_max * window.get_norm_factor() * nb_fft as f64) );
+
+			series_vec.push(temp_series.clone());
+
+		}
+
+		
+		// computes first value and push it into the output vector
+		let mut one_series: &mut FrequencySeries = &mut FrequencySeries::from_vector(
+			f_max, vec![Complex{ re: 0.0f64, im: 0.0f64 }; window.get_size() / 2 + 1]);
+		for i in 0..nb_fft {
+			one_series = one_series + &series_vec[i];
+		}
+		
+		// initialize output data vector
+		let mut output: Vec<Vec<Complex<f64>>> = Vec::new();
+		output.push( one_series.get_data() );
+
+		// roll over the rest of the time series
+		for i in nb_fft..window.nb_fft(self.get_size()) {
+			one_series = one_series + &series_vec[i];
+			one_series = one_series - &series_vec[i-nb_fft];
+			output.push( one_series.get_data() );
+		}
+		
+		Spectrogram::from_vector(
+			f_max,
+			((nb_fft - 1) * step + window.get_size()) as f64 / self.get_fs(),
+			step as f64 / self.get_fs(),
+			output)
+	}
+	/// Compute power spectral density using cross spectral density with itself
+	/// 
+	/// # Example
+	/// ```
+	/// use gw_signal::{
+	/// 	timeseries::*,
+	/// 	frequencyseries::*,
+	/// 	windows::*,
+	/// };
+	///
+	/// // creates two white noise signals
+	/// let window: Window = hann(1., 0.5, 1e3);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
+	///
+	/// // compute the csd
+	/// let psd: FrequencySeries = signal_1.time_psd(&window, 4.);
+	/// 
+	/// ```
+	pub fn time_psd(
+		&self,
+		window: &Window,
+		nb_fft: usize) -> Spectrogram {
+
+		// use csd
+		let self_copy: &TimeSeries<D> = &(self.clone());
+		self.time_csd(&self_copy, window, nb_fft)
+	}
+	/// Compute the amplitude spectral density of a signal. Uses the psd function
+	/// 
+	/// # Example
+	/// ```
+	/// use gw_signal::{
+	/// 	timeseries::*,
+	/// 	frequencyseries::*,
+	/// 	windows::*,
+	/// };
+	///
+	/// // creates two white noise signals
+	/// let window: Window = hann(1., 0.5, 1e3);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
+	///
+	/// // compute the csd
+	/// let asd: FrequencySeries = signal_1.time_asd(&window, 4.);
+	/// 
+	/// ```
+	pub fn time_asd(
+		&self,
+		window: &Window,
+		nb_fft: usize) -> Spectrogram {
+		
+		self.time_psd(window, nb_fft).sqrt()
+	}
+	/// Compute the coherence between two signals.
+	/// `\gamma_{1,2}(f) = \frac{|csd_{1,2}(f)|}{psd_1(f) \cdot psd_2(f)}`
+	/// 
+	/// # Example
+	/// ```
+	/// use gw_signal::{
+	/// 	timeseries::*,
+	/// 	frequencyseries::*,
+	/// 	windows::*,
+	/// };
+	///
+	/// // creates two white noise signals
+	/// let window: Window = hann(1., 0.5, 1e3);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
+	/// let mut signal_2: TimeSeries = signal_1.clone() * 2.;
+	///
+	/// // compute the csd
+	/// let coherence: FrequencySeries = signal_1.coherence(&signal_2, &window, 4.);
+	/// 
+	/// ```
+	pub fn time_coherence(
+		&self,
+		other: &TimeSeries<D>,
+		window: &Window,
+		nb_fft: usize) -> Spectrogram {
+
+		let psd1: Spectrogram = self.clone().time_psd(window, nb_fft);
+		let psd2: Spectrogram = other.clone().time_psd(window, nb_fft);
+		let mut csd: Spectrogram = self.time_csd(other, window, nb_fft).abs2();
+		((&mut csd / &psd1) / &psd2).clone()
+	}
+	/// Compute the transfer functions between two signals.
+	/// `\TF_{1,2}(f) = \frac{csd_{1,2}(f)}{psd_1(f)}`
+	/// 
+	/// # Example
+	/// ```
+	/// use gw_signal::{
+	/// 	timeseries::*,
+	/// 	frequencyseries::*,
+	/// 	windows::*,
+	/// };
+	///
+	/// // creates two white noise signals
+	/// let window: Window = hann(1., 0.5, 1e3);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
+	/// let mut signal_2: TimeSeries = signal_1.clone() * 2.;
+	///
+	/// // compute the csd
+	/// let transfer_function: FrequencySeries = signal_1.transfer_function(&signal_2, &window);
+	/// 
+	/// ```
+	pub fn time_tf(
+		&self,
+		other: &TimeSeries<D>,
+		window: &Window,
+		nb_fft: usize) -> Spectrogram {
+
+		let psd: Spectrogram = self.clone().time_psd(window, nb_fft);
+		let mut csd: Spectrogram = self.time_csd(other, window, nb_fft);
+		(&mut csd / &psd).clone()
+	}
 }
 
 /* --------------------------------------------------------------------------------------------- */
 
 /// Implement signal filtering
 impl<D> TimeSeries<D> 
-	where D: ComplexFloat + AddAssign + SubAssign + MulAssign + DivAssign + Data,
+	where D: ComplexFloat + AddAssign + SubAssign + MulAssign + DivAssign,
 {
 
 	/// The following method apply an IIR filter to a time series
@@ -226,19 +448,19 @@ impl<D> TimeSeries<D>
 	/// # Example	
 	/// ```
 	/// use gw_signal::{
-	/// 	timeseries as ts,
-	/// 	filter as flt,
+	/// 	timeseries::*,
+	/// 	filter::*,
 	/// };
 	///
 	/// // creates two white noise signals
 	/// let fs: f64 = 1e3;
-	/// let mut signal_1: ts::TimeSeries = ts::TimeSeries::white_noise(20000, f64, 1.);
+	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(20000, f64, 1.);
 	/// 
 	/// // generates an 8th butterworth lowpass filter at 10 Hz
-	/// let butter: flt::Filter::butterworth(8, flt::BType::LowType(10.), fs);
+	/// let butter: Filter::butterworth(8, BType::LowType(10.), fs);
 	/// 
 	/// // apply the filter to the signal
-	/// let mut signal_2: ts::TimeSeries = signal_1.apply_filter(butter);
+	/// let mut signal_2: TimeSeries = signal_1.apply_filter(butter);
 	///
 	/// ```
 	pub fn apply_filter(&mut self, input_filter: &Filter) {
@@ -295,13 +517,13 @@ pub trait SeriesIO {
 	/// # Example	
 	/// ```
 	/// use gw_signal::{
-	/// 	timeseries as ts,
+	/// 	timeseries::*,
 	/// 	Series_IO,
 	/// };
 	///
 	/// // creates a white noise signals
 	/// let fs: f64 = 1e3;
-	/// let mut signal: ts::TimeSeries = ts::TimeSeries::white_noise(20000, fs, 1.);
+	/// let mut signal: TimeSeries = TimeSeries::white_noise(20000, fs, 1.);
 	/// 
 	/// // print the 10 first values of the time series
 	/// signal.print(0, 10);
@@ -312,13 +534,13 @@ pub trait SeriesIO {
 	/// # Example	
 	/// ```
 	/// use gw_signal::{
-	/// 	timeseries as ts,
-	/// 	filter as flt,
+	/// 	timeseries::*,
+	/// 	filter::*,
 	/// };
 	/// 
 	/// // creates a white noise signals
 	/// let fs: f64 = 1e3;
-	/// let mut signal: ts::TimeSeries = ts::TimeSeries::white_noise(20000, fs, 1.);
+	/// let mut signal: TimeSeries = TimeSeries::white_noise(20000, fs, 1.);
 	/// 
 	/// // Write csv files
 	/// signal.write_csv("TimeSeries.csv");
@@ -328,19 +550,20 @@ pub trait SeriesIO {
 	/// # Example	
 	/// ```
 	/// use gw_signal::{
-	/// 	timeseries as ts,
-	/// 	filter as flt,
+	/// 	timeseries::*,
+	/// 	filter::*,
 	/// };
 	/// 
 	/// // Read time series from csv files
-	/// let mut signal: ts::TimeSeries<f64> = ts::TimeSeries::<f64>::read_csv("TimeSeries.csv");
+	/// let mut signal: TimeSeries<f64> = TimeSeries::<f64>::read_csv("TimeSeries.csv");
 	/// ```
 	fn read_csv(file_name: &str) -> Self;
 }
 
 
-impl<D: ComplexFloat + Display + Data> SeriesIO for TimeSeries<D> {
-    fn print(&self, n1: usize, n2: usize){
+impl<D: ComplexFloat + ToString + FromStr + Display> SeriesIO for TimeSeries<D> {
+    
+	fn print(&self, n1: usize, n2: usize) {
 		let mut time: f64;         
 		for i in n1..n2 {
             // compute time
@@ -349,39 +572,42 @@ impl<D: ComplexFloat + Display + Data> SeriesIO for TimeSeries<D> {
         }
     }
 
-	fn write_csv(&self, file_name: &str){
-
+	fn write_csv(&self, file_name: &str) {
 		let mut w = File::create(file_name).unwrap();
 		writeln!(&mut w, "time,value").unwrap();
 		let mut time: f64;
-        for i in 0..self.get_size() {
+		let mut i: f64 = 0.;
+        for value in self.get_data().iter() {
             // compute time
-            time = self.get_t0() + (i as f64) / self.get_fs();
-            writeln!(&mut w, "{}", self[i].to_str(time)).unwrap();
+            time = self.get_t0() + i / self.get_fs();
+            writeln!(&mut w, "{},{}", time, value.to_string()).unwrap();
+			i += 1.;
         }
-
 	}
 
 	fn read_csv(file_name: &str) -> Self {
-
 		println!("Read file: {}", file_name);
 		// read file
 		let r = File::open(file_name).expect("The file is not found!");
 		let buffer = BufReader::new(r);
-
 		// initialize time and data vectors
 		let (mut time, mut data): (Vec<f64>, Vec<D>) = (Vec::new(), Vec::new());
 		// make iterator over lines and read file header
 		let mut line_iter = buffer.lines();
 		// read line, split it over the "," character and make a vector of strings
-		let line_str = line_iter.next().unwrap().unwrap();
-		let line_vec: Vec<&str> = line_str.split(",").collect();
+		let mut line_str = line_iter.next().unwrap().unwrap();
+		let mut line_vec: Vec<&str> = line_str.split(",").collect();
 		assert_eq!(line_vec[0], "time");
-
 		for line in line_iter {
-			let sample = D::from_string(line.expect("Unable to read line")).unwrap();
-			time.push(sample.0);
-			data.push(sample.1);
+			line_str = line.expect("Unable to read line");
+			line_vec = line_str.split(",").collect();
+
+			time.push(f64::from_str(&line_vec[0]).expect("Unable to read time value"));
+			let read_data = D::from_str(&line_vec[1]);
+			match read_data {
+				Ok(x) => data.push(x),
+				Err(_) => panic!("Unable to read data value"),
+			}
 		}
 		let frequency: f64 = (time.len()-1) as f64 / (time[time.len()-1] - time[0]);
 		TimeSeries::from_vector(frequency, time[0], data)
@@ -393,9 +619,8 @@ impl<D: ComplexFloat + Display + Data> SeriesIO for TimeSeries<D> {
 
 impl SeriesIO for FrequencySeries {
     
-	fn print(&self, n1: usize, n2: usize){
+	fn print(&self, n1: usize, n2: usize) {
         let mut freq: f64;
-
         for i in n1..n2 {
             // compute time
             freq = self.get_f_max() * (i as f64) / ((self.get_size()-1) as f64);
@@ -403,26 +628,24 @@ impl SeriesIO for FrequencySeries {
         }
     }
 	
-	fn write_csv(&self, file_name: &str){
-
+	fn write_csv(&self, file_name: &str) {
 		let mut w = File::create(file_name).unwrap();
-		writeln!(&mut w, "frequency,real,imaginary").unwrap();
+		writeln!(&mut w, "frequency,value").unwrap();
 		let mut freq: f64;
-
-        for i in 0..self.get_size() {
+		let mut i: f64 = 0.;
+        for value in self.get_data().iter() {
             // compute time
-            freq = self.get_f_max() * (i as f64) / ((self.get_size()-1) as f64);
-            writeln!(&mut w, "{},{},{}", freq, self[i].re(), self[i].im()).unwrap();
+            freq = self.get_f_max() * i / ((self.get_size()-1) as f64);
+            writeln!(&mut w, "{},{}", freq, value.to_string()).unwrap();
+			i += 1.;
         }
 	}
 
 	fn read_csv(file_name: &str) -> Self {
-
 		println!("Read file: {}", file_name);
 		// read file
 		let r = File::open(file_name).expect("The file is not found!");
 		let buffer = BufReader::new(r);
-
 		// initialize time and data vectors
 		let (mut freq, mut data): (Vec<f64>, Vec<Complex<f64>>) = (Vec::new(), Vec::new());
 		// make iterator over lines and read file header
@@ -431,26 +654,67 @@ impl SeriesIO for FrequencySeries {
 		let mut line_str = line_iter.next().unwrap().unwrap();
 		let mut line_vec: Vec<&str> = line_str.split(",").collect();
 		assert_eq!(line_vec[0], "frequency");
-
 		for line in line_iter {
-			line_str = line.unwrap();
+			line_str = line.expect("Unable to read line");
 			line_vec = line_str.split(",").collect();
-			freq.push(f64::from_str(line_vec[0]).unwrap());
-			data.push(Complex{
-				re: f64::from_str(line_vec[1]).unwrap(),
-				im: f64::from_str(line_vec[2]).unwrap()
-			});
+			freq.push(f64::from_str(&line_vec[0]).expect("Unable to read frequency value"));
+			let read_data = Complex::from_str(&line_vec[1]);
+			match read_data {
+				Ok(x) => data.push(x),
+				Err(_) => panic!("Unable to read data value"),
+			}
 		}
 		FrequencySeries::from_vector(freq[freq.len()-1], data)
 	}
+}
 
+impl SeriesIO for Spectrogram {
+	
+	fn print(&self, n1: usize, n2: usize){
+		panic!("Print function not implemented for spectrogram");
+	}
+
+	fn write_csv(&self, file_name: &str) {
+		let (_size_time, size_freq) = self.get_size();
+		// create file
+		let mut w = File::create(file_name).unwrap();
+		// write first line with frequency values
+		let mut line = String::from("time\\frequency");
+		let mut freq: f64;
+		for i in 0..size_freq {
+			// compute frequency
+			freq = self.get_f_max() * (i as f64) / (size_freq - 1) as f64;
+			line.push_str(",");
+			line.push_str(&freq.to_string());
+		}
+		line.push_str("\n");
+		// write firsst line
+		writeln!(&mut w, "{}", line).unwrap();
+		// write data vector
+		let mut time: f64 = self.get_t0();
+        for frequency_series in self.get_data().iter() {
+            // compute time
+			line = time.to_string();
+			for value in frequency_series.iter() {
+				line.push_str(",");
+				line.push_str(&value.to_string());
+			}
+			line.push_str("\n");
+            writeln!(&mut w, "{}", line).unwrap();
+            time += self.get_dt();
+        }
+	}
+
+	fn read_csv(file_name: &str) -> Self {
+		panic!("read csv function not implemented for spectrogram");
+	}
 }
 
 
 /* --------------------------------------------------------------------------------------------- *
  * Plot time series
  * --------------------------------------------------------------------------------------------- */
-
+/*
 impl RealPlot {
 	/// Add one time series to the plot
 	pub fn add_timeseries<D, F>(&mut self, series: &TimeSeries<D>) 
@@ -509,237 +773,7 @@ impl ComplexPlot {
 	}
 
 }
-/*
-/// Draw time and frequency series
-/// If the series is real, draw one canvas
-/// If the series is complex, the canvas is splitted into the modulus and phase
-pub trait Plot {
-	/// Plot time series
-	/// 
-	/// # Example
-	/// ```
-	/// use gw_signal::{
-	/// 	timeseries as ts,
-	/// 	Plot
-	/// };
-	/// 
-	/// let sampling: f64 = 1e3;
-	/// let mut signal: ts::TimeSeries = ts::TimeSeries::white_noise(20000, sampling, 0f64, 1f64);
-	/// signal.plot("signal.png");
-	/// ```
-	fn plot(&self, name: &str);
-}
-
-impl Plot for TimeSeries<f32> {
-	fn plot(&self, name: &str) {
-		
-		let (x_min, x_max) = (self.get_t0(), self.get_t0() + self.get_size() as f64 / self.get_fs());
-		let (y_min, y_max) = (self.real().min(), self.real().max());
-		
-		// define white canvas
-		let drawing_area = SVGBackend::new(name, (1365, 768)).into_drawing_area();
-		drawing_area.fill(&WHITE).unwrap();
-		
-		// define canvas features
-		let mut ctx = ChartBuilder::on(&drawing_area)
-			.margin(20)
-			// axis
-			.set_left_and_bottom_label_area_size(64)
-			// grid
-			.build_cartesian_2d(x_max..x_min, y_min..y_max)
-			.unwrap();
-
-		ctx.configure_mesh().draw().unwrap();
-		
-		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
-			self.get_t0() + index as f64 / self.get_fs(),
-			self[index]
-		)), &RED )).unwrap();
-
-	}
-}
-impl Plot for TimeSeries<f64> {
-	fn plot(&self, name: &str) {
-		
-		let (x_min, x_max) = (self.get_t0(), self.get_t0() + self.get_size() as f64 / self.get_fs());
-		let (y_min, y_max) = (self.real().min(), self.real().max());
-	
-		// define white canvas
-		let drawing_area = SVGBackend::new(name, (1365, 768)).into_drawing_area();
-		drawing_area.fill(&WHITE).unwrap();
-		
-		// define canvas features
-		let mut ctx = ChartBuilder::on(&drawing_area)
-			.margin(20)
-			// axis
-			.set_left_and_bottom_label_area_size(64)
-			// caption
-			.caption("Timeseries",("sans-serif", 40))
-			// grid
-			.build_cartesian_2d(x_min..x_max, y_min..y_max)
-			.unwrap();
-
-		ctx.configure_mesh().draw().unwrap();
-		
-		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
-			self.get_t0() + index as f64 / self.get_fs(),
-			self[index]
-		)), &RED )).unwrap();
-
-	}
-}
-impl Plot for TimeSeries<Complex<f32>> {
-	fn plot(&self, name: &str) {
-		
-		// define white canvas
-		let drawing_area = SVGBackend::new(name, (1365, 768)).into_drawing_area();
-		drawing_area.fill(&WHITE).unwrap();
-		let (top, bottom) = drawing_area.split_vertically(128);
-		
-		// draw real part
-		let (x_min, x_max) = (self.get_t0(), self.get_t0() + self.get_size() as f64 / self.get_fs());
-		let (y_min, y_max) = (self.real().min(), self.real().max());
-		
-		// draw canvas
-		let mut ctx = ChartBuilder::on(&top)
-			.margin(20)
-			// axis
-			.set_left_and_bottom_label_area_size(64)
-			// grid
-			.build_cartesian_2d(x_max..x_min, y_min..y_max)
-			.unwrap();
-
-		ctx.configure_mesh().draw().unwrap();
-		
-		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
-			self.get_t0() + index as f64 / self.get_fs(),
-			self.real()[index]
-		)), &RED )).unwrap();
-
-		// draw imaginary part
-		let (y_min, y_max) = (self.imag().min(), self.imag().max());
-		
-		// draw canvas
-		let mut ctx = ChartBuilder::on(&bottom)
-			.margin(20)
-			// axis
-			.set_left_and_bottom_label_area_size(64)
-			// grid
-			.build_cartesian_2d(x_max..x_min, y_min..y_max)
-			.unwrap();
-
-		ctx.configure_mesh().draw().unwrap();
-		
-		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
-			self.get_t0() + index as f64 / self.get_fs(),
-			self.imag()[index]
-		)), &RED )).unwrap();
-
-	}
-}
-impl Plot for TimeSeries<Complex<f64>> {
-	fn plot(&self, name: &str) {
-		
-		// define white canvas
-		let drawing_area = SVGBackend::new(name, (1365, 768)).into_drawing_area();
-		drawing_area.fill(&WHITE).unwrap();
-		let (top, bottom) = drawing_area.split_vertically(384);
-		
-		// draw real part
-		let (x_min, x_max) = (self.get_t0(), self.get_t0() + self.get_size() as f64 / self.get_fs());
-		let (y_min, y_max) = (self.abs().min(), self.abs().max());
-		
-
-		// draw canvas
-		let mut ctx = ChartBuilder::on(&top)
-			.margin(20)
-			// axis
-			.set_left_and_bottom_label_area_size(64)
-			// grid
-			.build_cartesian_2d(x_max..x_min, y_min..y_max)
-			.unwrap();
-
-		ctx.configure_mesh().draw().unwrap();
-		
-		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
-			self.get_t0() + index as f64 / self.get_fs(),
-			self.abs()[index]
-		)), &RED )).unwrap();
-
-		// draw imaginary part
-		let (y_min, y_max) = (self.arg().min(), self.arg().max());
-		
-		// draw canvas
-		let mut ctx = ChartBuilder::on(&bottom)
-			.margin(20)
-			// axis
-			.set_left_and_bottom_label_area_size(64)
-			// grid
-			.build_cartesian_2d(x_max..x_min, y_min..y_max)
-			.unwrap();
-
-		ctx.configure_mesh().draw().unwrap();
-		
-		ctx.draw_series(LineSeries::new( (0..self.get_size()).map( |index| (
-			self.get_t0() + index as f64 / self.get_fs(),
-			self.arg()[index]
-		)), &RED )).unwrap();
-
-	}
-}
-
-impl Plot for FrequencySeries {
-	fn plot(&self, name: &str) {
-		
-		// define white canvas
-		let drawing_area = SVGBackend::new(name, (1365, 768)).into_drawing_area();
-		drawing_area.fill(&WHITE).unwrap();
-		let (top, bottom) = drawing_area.split_vertically(384);
-		
-		// draw real part
-		let (x_min, x_max) = (self.get_f_max() / (self.get_size() - 1) as f64, self.get_f_max());
-		let (y_min, y_max) = (self.min_abs(), self.max_abs());
-		
-
-		// draw canvas
-		let mut ctx = ChartBuilder::on(&top)
-			.margin(20)
-			// axis
-			.set_left_and_bottom_label_area_size(64)
-			// grid
-			.build_cartesian_2d((x_min..x_max).log_scale(), (y_min..y_max).log_scale())
-			.unwrap();
-
-		ctx.configure_mesh().draw().unwrap();
-		
-		ctx.draw_series(LineSeries::new( (1..self.get_size()).map( |index| (
-			(index as f64 / (self.get_size() - 1) as f64) * self.get_f_max(),
-			self.clone().abs()[index].re
-		)), &RED )).unwrap();
-
-		// draw imaginary part
-		let (y_min, y_max) = (-PI, PI);
-		
-		// draw canvas
-		let mut ctx = ChartBuilder::on(&bottom)
-			.margin(20)
-			// axis
-			.set_left_and_bottom_label_area_size(64)
-			// grid
-			.build_cartesian_2d((x_min..x_max).log_scale(), y_min..y_max)
-			.unwrap();
-
-		ctx.configure_mesh().draw().unwrap();
-		
-		ctx.draw_series(LineSeries::new( (1..self.get_size()).map( |index| (
-			(index as f64 / (self.get_size()-1) as f64) * self.get_f_max(),
-			self.clone().arg()[index].re
-		)), &RED )).unwrap();
-
-	}
-}
 */
-
 /* --------------------------------------------------------------------------------------------- *
  * Filter methods
  * --------------------------------------------------------------------------------------------- */

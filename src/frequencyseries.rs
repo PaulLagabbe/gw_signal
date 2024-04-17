@@ -130,6 +130,12 @@ impl FrequencySeries {
 		}
 		minimum
 	}
+	pub fn set_to_zero(&mut self) {
+		
+		for val in self.data.iter_mut() {
+			*val = Complex{re: 0f64, im: 0f64};
+		}	
+	}
 }
 
 /* --------------------------------------------------------------------------------------------- *

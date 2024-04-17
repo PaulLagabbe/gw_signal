@@ -145,10 +145,13 @@ impl Window {
 	pub fn get_size(&self) -> usize {
 		self.vector.len()
 	}
-
+	/// Get the number of overlapping points between two successive window
+	pub fn get_overlap(&self) -> usize {
+		self.overlap
+	}
 	/// return a slice of the parameter data vector that has been windowed
 	pub fn get_windowed_data<D>(&self, data: Vec<D>, k: usize) -> Vec<Complex<f64>> 
-	where D: ComplexFloat,
+		where D: ComplexFloat,
 	{
 		
 		assert!(k < self.nb_fft(data.len()));
