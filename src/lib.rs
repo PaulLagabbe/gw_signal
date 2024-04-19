@@ -336,7 +336,7 @@ impl<D> TimeSeries<D>
 	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
 	///
 	/// // compute the csd
-	/// let psd: FrequencySeries = signal_1.time_psd(&window, 4.);
+	/// let psd: FrequencySeries = signal_1.time_psd(&window, 10);
 	/// 
 	/// ```
 	pub fn time_psd(
@@ -363,7 +363,7 @@ impl<D> TimeSeries<D>
 	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(2000000, 1e3, 0f64, 1f64);
 	///
 	/// // compute the csd
-	/// let asd: FrequencySeries = signal_1.time_asd(&window, 4.);
+	/// let asd: FrequencySeries = signal_1.time_asd(&window, 10);
 	/// 
 	/// ```
 	pub fn time_asd(
@@ -390,10 +390,10 @@ impl<D> TimeSeries<D>
 	/// let mut signal_2: TimeSeries = signal_1.clone() * 2.;
 	///
 	/// // compute the csd
-	/// let coherence: FrequencySeries = signal_1.coherence(&signal_2, &window, 4.);
+	/// let coherence: FrequencySeries = signal_1.time_cohe(&signal_2, &window, 10);
 	/// 
 	/// ```
-	pub fn time_coherence(
+	pub fn time_cohe(
 		&self,
 		other: &TimeSeries<D>,
 		window: &Window,
@@ -421,7 +421,7 @@ impl<D> TimeSeries<D>
 	/// let mut signal_2: TimeSeries = signal_1.clone() * 2.;
 	///
 	/// // compute the csd
-	/// let transfer_function: FrequencySeries = signal_1.transfer_function(&signal_2, &window);
+	/// let transfer_function: FrequencySeries = signal_1.time_tf(&signal_2, &window 10);
 	/// 
 	/// ```
 	pub fn time_tf(
@@ -671,7 +671,15 @@ impl SeriesIO for FrequencySeries {
 impl SeriesIO for Spectrogram {
 	
 	fn print(&self, n1: usize, n2: usize){
-		panic!("Print function not implemented for spectrogram");
+		println!("Print the first frequency series of the spectrogram");
+		let frequency_series = &self[0];
+		let mut freq: f64;
+		for i in n1..n2 {
+            // compute time
+            freq = self.get_f_max() * (i as f64) / ((self.get_size().1-1) as f64);
+            println!("f = {:.3} Hz: {:.6} + {:.6}i",
+				freq, frequency_series[i].re, frequency_series[i].im);
+        }
 	}
 
 	fn write_csv(&self, file_name: &str) {
@@ -687,7 +695,7 @@ impl SeriesIO for Spectrogram {
 			line.push_str(",");
 			line.push_str(&freq.to_string());
 		}
-		line.push_str("\n");
+		//line.push_str("\n");
 		// write firsst line
 		writeln!(&mut w, "{}", line).unwrap();
 		// write data vector
@@ -699,14 +707,54 @@ impl SeriesIO for Spectrogram {
 				line.push_str(",");
 				line.push_str(&value.to_string());
 			}
-			line.push_str("\n");
+			//line.push_str("\n");
             writeln!(&mut w, "{}", line).unwrap();
             time += self.get_dt();
         }
 	}
 
 	fn read_csv(file_name: &str) -> Self {
-		panic!("read csv function not implemented for spectrogram");
+		println!("Read file: {}", file_name);
+		// read file
+		let r = File::open(file_name).expect("The file is not found!");
+		let buffer = BufReader::new(r);
+		
+		// make iterator over lines and read file header
+		let mut line_iter = buffer.lines();
+		
+		// read line, split it over the "," character and make a vector of strings
+		let mut line_str = line_iter.next().unwrap().unwrap();
+		let mut line_vec: Vec<&str> = line_str.split(",").collect();
+		
+		// read last value of the frequency vector
+		let f_max: f64 = f64::from_str(line_vec[line_vec.len() - 1])
+			.expect("Unable to read maximum frequency");
+		// initialize data vector and time vector
+		let mut time: Vec<f64> = Vec::new();
+		let mut data: Vec<Vec<Complex<f64>>> = Vec::new();
+		let mut is_time: bool;
+
+		// fill the vector
+		for line in line_iter {
+			line_str = line.expect("Unable to read line");
+			line_vec = line_str.split(",").collect();
+			is_time = true;
+			let mut line_vector: Vec<Complex<f64>> = Vec::new();
+			for str_value in line_vec.iter() {
+				if is_time {
+					time.push(f64::from_str(str_value).expect("unable to read time value"));
+				} else {
+					let read_data = Complex::from_str(str_value);
+					match read_data {
+						Ok(x) => line_vector.push(x),
+						Err(_) => panic!("Unable to read data value"),
+					}
+				}
+				is_time = false;
+			}
+			data.push(line_vector);
+		}
+		Spectrogram::from_vector(f_max, time[0], time[1]-time[0], data)
 	}
 }
 
@@ -807,7 +855,6 @@ impl Filter {
 	}
 
 }
-
 
 
 

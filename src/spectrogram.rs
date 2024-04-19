@@ -6,7 +6,7 @@ use num::complex::{
 	Complex,
 	ComplexFloat
 };
-use std::ops::{Add, Neg, Sub, Mul, Div};
+use std::ops::{Add, Neg, Sub, Mul, Div, Index, IndexMut};
 
 /* --------------------------------------------------------------------------------------------- *
  * Define structures
@@ -398,20 +398,22 @@ impl<'a> Div<&'a mut Spectrogram> for f64 {
 }
 
 /* operator[] ---------------------------------------------------------------------------------- */
-/*
+
 impl Index<usize> for Spectrogram {
 	
-	type Output = Complex<f64>;
-	fn index(&self, i: usize) -> &Complex<f64> {
-		assert_gt!(self.data.len(), i);
+	type Output = Vec<Complex<f64>>;
+	fn index(&self, i: usize) -> &Vec<Complex<f64>> {
+		assert!(self.data.len() > i);
+		
 		&self.data[i]
 	}
 }
 impl IndexMut<usize> for Spectrogram {
 		
-	fn index_mut(&mut self, i: usize) -> &mut Complex<f64> {
-		assert_gt!(self.data.len(), i);
+	fn index_mut(&mut self, i: usize) -> &mut Vec<Complex<f64>> {
+		assert!(self.data.len() > i);
+		
 		&mut self.data[i]
 	}
 }
-*/
+
