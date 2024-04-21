@@ -17,103 +17,159 @@ use num::{Float, Complex, complex::ComplexFloat, NumCast};
 /// Consists in a vector of data indexed by time.
 #[derive(Debug, Clone)]
 pub struct TimeSeries<D> {
-    fs: f64,
-    t0: f64,
-    data: Vec<D>,
+	fs: f64,
+	t0: f64,
+	data: Vec<D>,
 }
 
 
 
 impl<D: ComplexFloat + Float> TimeSeries<D> {
-    /// Real signal generators:
-    /// 
-    /// Generates a white noise signal with a given size, sampling frequency and the noise amplitude
-    /// 
-    /// # Examples
-    ///
-    /// ```
-    /// use gw_signal::timeseries::*;
-    /// 
-    /// // creates a white noise signal with 20000 points, sampled at 1 kHz,
-    /// // the variance of the noise as 0.1 V
-    /// let mut signal: TimeSeries = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
-    ///
-    /// ```
-    pub fn white_noise(size: usize, fs: f64, mu: D, sigma: D) -> Self 
+	/// Real signal generators:
+	/// 
+	/// Generates a white noise signal with a given size, sampling frequency and the noise amplitude
+	/// 
+	/// # Examples
+	///
+	/// ```
+	/// use gw_signal::timeseries::*;
+	/// 
+	/// // creates a white noise signal with 20000 points, sampled at 1 kHz,
+	/// // the variance of the noise as 0.1 V
+	/// let mut signal: TimeSeries = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
+	///
+	/// ```
+	pub fn white_noise(size: usize, fs: f64, mu: D, sigma: D) -> Self 
 		where StandardNormal: Distribution<D>
 		{
 		
 		let rng = thread_rng();
-        let normal = Normal::new(mu, sigma).unwrap();
+		let normal = Normal::new(mu, sigma).unwrap();
 
-        // fill data vector
-        let data_vec: Vec<D> = normal.sample_iter(rng).take(size).collect();
+		// fill data vector
+		let data_vec: Vec<D> = normal.sample_iter(rng).take(size).collect();
 		
-        // initialize TimeSeries
-        TimeSeries::from_vector(fs, 0., data_vec)
-    }
+		// initialize TimeSeries
+		TimeSeries::from_vector(fs, 0., data_vec)
+	}
 }
 impl<D: ComplexFloat> TimeSeries<D> {
-    /// Generates a sinusoidal signal.
-    /// 
-    /// # Examples
-    ///
-    /// ```
-    /// use gw_signal::timeseries::*;
-    ///
-    /// // creates a sinusoidal signal with 20000 points, sampled at 1 kHz, using 8 bytes for each sample
-    /// // The frequency, amplitudes and phase at the origin are respectively:
-    /// //  5 Hz, 10 V and 0 rad.
-    /// let mut signal: TimeSeries = TimeSeries::wave(20000, 1e3, 5f64, 10f64, 0f64);
-    ///
-    /// ```
-    pub fn wave(size: usize, fs: f64, freq: D, ampl: D, phase: D) -> Self {
+	/// Generates a sinusoidal signal.
+	/// 
+	/// # Examples
+	///
+	/// ```
+	/// use gw_signal::timeseries::*;
+	///
+	/// // creates a sinusoidal signal with 20000 points, sampled at 1 kHz, using 8 bytes for each sample
+	/// // The frequency, amplitudes and phase at the origin are respectively:
+	/// //  5 Hz, 10 V and 0 rad.
+	/// let mut signal: TimeSeries = TimeSeries::wave(20000, 1e3, 5f64, 10f64, 0f64);
+	///
+	/// ```
+	pub fn wave(size: usize, fs: f64, freq: D, ampl: D, phase: D) -> Self {
 
-        let mut phi: D;
-        let mut data_vec: Vec<D> = Vec::new();
+		let mut phi: D;
+		let mut data_vec: Vec<D> = Vec::new();
 
-        // fill data vector
-        for i in 0..size {
-            phi = freq * NumCast::from(2. * PI * i as f64 / fs).unwrap() + phase;
-            data_vec.push(ampl * phi.cos());
-        }
-        // initialize TimeSeries
-        TimeSeries::from_vector(fs, 0., data_vec)
-    }
-    
+		// fill data vector
+		for i in 0..size {
+			phi = freq * NumCast::from(2. * PI * i as f64 / fs).unwrap() + phase;
+			data_vec.push(ampl * phi.cos());
+		}
+		// initialize TimeSeries
+		TimeSeries::from_vector(fs, 0., data_vec)
+	}
+	
 	/// Generates a constant signal.
-    /// 
-    /// # Examples
-    ///
-    /// ```
-    /// use gw_signal::timeseries::*;
-    ///
-    /// // creates a constant signal with 20000 points, sampled at 1 kHz
-    /// let mut signal: TimeSeries = TimeSeries::constant(20000, 1e3, 1f64);
-    ///
-    /// ```
-    pub fn constant(size: usize, fs: f64, value: D) -> Self {
+	/// 
+	/// # Examples
+	///
+	/// ```
+	/// use gw_signal::timeseries::*;
+	///
+	/// // creates a constant signal with 20000 points, sampled at 1 kHz
+	/// let mut signal: TimeSeries = TimeSeries::constant(20000, 1e3, 1f64);
+	///
+	/// ```
+	pub fn constant(size: usize, fs: f64, value: D) -> Self {
 
-        let data_vec: Vec<D> = vec![value; size];
+		let data_vec: Vec<D> = vec![value; size];
 
-        // initialize TimeSeries
-        TimeSeries::from_vector(fs, 0., data_vec)
-    }
+		// initialize TimeSeries
+		TimeSeries::from_vector(fs, 0., data_vec)
+	}
 
 	/// Base onstructor, called by the other functions
-    pub fn from_vector(fs: f64,
-                       t0: f64,
-                       input_data: Vec<D>) -> Self {
+	pub fn from_vector(fs: f64,
+					   t0: f64,
+					   input_data: Vec<D>) -> Self {
 
-        // define time series
-        TimeSeries {
-            fs,
-            t0,
-            data: input_data
-        }
-
-    }
+		// define time series
+		TimeSeries {
+			fs,
+			t0,
+			data: input_data
+		}
+	}
 }
+
+/* --------------------------------------------------------------------------------------------- *
+ * Modulation
+ * --------------------------------------------------------------------------------------------- */
+
+
+/// Generates a modulated signal
+/// The amplitude, the frequency or the phase 
+impl<D: ComplexFloat> TimeSeries<D> {
+	/// Generates a sinusoidal waves that can be modulated in amplitude, in frequency or in phase
+	/// 
+	/// # Examples
+	///
+	/// ```
+	/// use std::f64::consts::PI;
+	/// use gw_signal::timeseries::*;
+	/// 
+	/// // sampling frequency
+	/// let sampling: f64 = 1e3;
+	///
+	/// // defines a sinusoidal wave at 10 Hz, modulated in frequency
+	/// let mut signal: TimeSeries<f64> = TimeSeries::modulated_signal(
+	///		200000, sampling,
+	/// 	10., 												// carrier frequency
+	///		|t: f64| 1f64, 										// amplitude modulation
+	///		|t: f64| -> f64 {0.2 * (2. * PI * t * 0.05).cos()}, // frequency modulation
+	///		|t: f64| 0f64 										// phase modulation
+	/// );
+	/// 
+	/// ```
+
+	pub fn modulated_signal(
+		size: usize,
+		fs: f64,
+		carrier: f64,
+		amplitude_mod: fn(f64) -> D,
+		frequency_mod: fn(f64) -> f64,
+		phase_mod: fn(f64) -> f64
+	) -> TimeSeries<D> {
+
+		let mut phi: f64 = 0f64;
+		let mut time: f64 = 0f64;
+		let mut data_vec: Vec<D> = Vec::new();
+
+		// fill data vector
+		for _i in 0..size {
+			time += 1. / fs;
+			phi += 2. * PI * (carrier + frequency_mod(time)) / fs;
+			data_vec.push(amplitude_mod(time) * D::from( (phi + phase_mod(time)).cos() ).unwrap());
+		}
+
+		// initialize TimeSeries
+		TimeSeries::from_vector(fs, 0., data_vec)
+	}
+
+}
+
 
 /* --------------------------------------------------------------------------------------------- *
  * traits
@@ -272,11 +328,11 @@ pub trait ToType {
 	/// # Example
 	/// 
 	/// ```
-    /// use gw_signal::timeseries::*;
+	/// use gw_signal::timeseries::*;
 	/// 	
-    /// 
-    /// // creates a white noise signal
-    /// let signal_f64: TimeSeries<f64> = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
+	/// 
+	/// // creates a white noise signal
+	/// let signal_f64: TimeSeries<f64> = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
 	/// let signal_f32: TimeSeries<f32> = signal_f64.to_f32();
 	/// ```
 	fn to_f32(&self) -> TimeSeries<f32>;
@@ -286,11 +342,11 @@ pub trait ToType {
 	/// # Example
 	/// 
 	/// ```
-    /// use gw_signal::timeseries::*;
+	/// use gw_signal::timeseries::*;
 	/// 	
-    /// 
-    /// // creates a white noise signal
-    /// let signal_f32: TimeSeries<f32> = TimeSeries::white_noise(20000, 1e3, 0f32, 1f32);
+	/// 
+	/// // creates a white noise signal
+	/// let signal_f32: TimeSeries<f32> = TimeSeries::white_noise(20000, 1e3, 0f32, 1f32);
 	/// let signal_f64: TimeSeries<f64> = signal_f32.to_f64();
 	/// ```
 	fn to_f64(&self) -> TimeSeries<f64>;
@@ -299,11 +355,11 @@ pub trait ToType {
 	/// # Example
 	/// 
 	/// ```
-    /// use gw_signal::timeseries::*;
+	/// use gw_signal::timeseries::*;
 	/// 	
-    /// 
-    /// // creates a white noise signal
-    /// let signal_f64: TimeSeries<f64> = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
+	/// 
+	/// // creates a white noise signal
+	/// let signal_f64: TimeSeries<f64> = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
 	/// let signal_c32: TimeSeries<Complex<f32>> = signal_f64.to_c32();
 	/// ```
 	fn to_c32(&self) -> TimeSeries<Complex<f32>>;
@@ -312,11 +368,11 @@ pub trait ToType {
 	/// # Example
 	/// 
 	/// ```
-    /// use gw_signal::timeseries::*;
+	/// use gw_signal::timeseries::*;
 	/// 	
-    /// 
-    /// // creates a white noise signal
-    /// let signal_f64: TimeSeries<f64> = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
+	/// 
+	/// // creates a white noise signal
+	/// let signal_f64: TimeSeries<f64> = TimeSeries::white_noise(20000, 1e3, 0f64, 1f64);
 	/// let signal_c64: TimeSeries<Complex<f64>> = signal_f64.to_c64();
 	/// ```
 	fn to_c64(&self) -> TimeSeries<Complex<f64>>;
@@ -406,58 +462,58 @@ impl<D: ComplexFloat<Real = F>, F: Float> TimeSeries<D> {
 impl<'a, D> Add<&TimeSeries<D>> for &'a mut TimeSeries<D> 
 	where D: AddAssign + ComplexFloat,
 {
-    type Output = &'a mut TimeSeries<D>;
+	type Output = &'a mut TimeSeries<D>;
 
-    fn add(self, other: &TimeSeries<D>) -> &'a mut TimeSeries<D> {
-        // verify if the length of the time series are equal
-        assert_eq!(self.data.len(), other.data.len());
-        // Modify data vector of the left time series
-        for i in 0..self.data.len() {
-            self.data[i] += other.data[i];
-        }
-        // return modified left timeseries
-        self
-    }
+	fn add(self, other: &TimeSeries<D>) -> &'a mut TimeSeries<D> {
+		// verify if the length of the time series are equal
+		assert_eq!(self.data.len(), other.data.len());
+		// Modify data vector of the left time series
+		for i in 0..self.data.len() {
+			self.data[i] += other.data[i];
+		}
+		// return modified left timeseries
+		self
+	}
 
 }
 impl<'a, D> Add<D> for &'a mut TimeSeries<D>
 	where D: AddAssign + ComplexFloat,
 {
-    type Output = &'a mut TimeSeries<D>;
+	type Output = &'a mut TimeSeries<D>;
 
-    fn add(self, other: D) -> &'a mut TimeSeries<D> {
-        // Modify data vector of the left time series
-        for i in 0..self.data.len() {
-            self.data[i] += other;
-        }
-        // return modified left timeseries
-        self
-    }
+	fn add(self, other: D) -> &'a mut TimeSeries<D> {
+		// Modify data vector of the left time series
+		for i in 0..self.data.len() {
+			self.data[i] += other;
+		}
+		// return modified left timeseries
+		self
+	}
 
 }
 impl<'a> Add<&'a mut TimeSeries<f32>> for f32 {
-    type Output = &'a mut TimeSeries<f32>;
-    fn add(self, other: &'a mut TimeSeries<f32>) -> &'a mut TimeSeries<f32> {
-        other.add(self)
-    }
+	type Output = &'a mut TimeSeries<f32>;
+	fn add(self, other: &'a mut TimeSeries<f32>) -> &'a mut TimeSeries<f32> {
+		other.add(self)
+	}
 }
 impl<'a> Add<&'a mut TimeSeries<f64>> for f64 {
-    type Output = &'a mut TimeSeries<f64>;
-    fn add(self, other: &'a mut TimeSeries<f64>) -> &'a mut TimeSeries<f64> {
-        other.add(self)
-    }
+	type Output = &'a mut TimeSeries<f64>;
+	fn add(self, other: &'a mut TimeSeries<f64>) -> &'a mut TimeSeries<f64> {
+		other.add(self)
+	}
 }
 impl<'a> Add<&'a mut TimeSeries<Complex<f32>>> for Complex<f32> {
-    type Output = &'a mut TimeSeries<Complex<f32>>;
-    fn add(self, other: &'a mut TimeSeries<Complex<f32>>) -> &'a mut TimeSeries<Complex<f32>> {
-        other.add(self)
-    }
+	type Output = &'a mut TimeSeries<Complex<f32>>;
+	fn add(self, other: &'a mut TimeSeries<Complex<f32>>) -> &'a mut TimeSeries<Complex<f32>> {
+		other.add(self)
+	}
 }
 impl<'a> Add<&'a mut TimeSeries<Complex<f64>>> for Complex<f64> {
-    type Output = &'a mut TimeSeries<Complex<f64>>;
-    fn add(self, other: &'a mut TimeSeries<Complex<f64>>) -> &'a mut TimeSeries<Complex<f64>> {
-        other.add(self)
-    }
+	type Output = &'a mut TimeSeries<Complex<f64>>;
+	fn add(self, other: &'a mut TimeSeries<Complex<f64>>) -> &'a mut TimeSeries<Complex<f64>> {
+		other.add(self)
+	}
 }
 /* operator- ----------------------------------------------------------------------------------- */
 impl<'a, D> Neg for &'a mut TimeSeries<D>
@@ -465,14 +521,14 @@ impl<'a, D> Neg for &'a mut TimeSeries<D>
 {
 	type Output = &'a mut TimeSeries<D>;
 
-    fn neg(self) -> &'a mut TimeSeries<D> {
-        // Modify data vector of the left time series
-        for i in 0..self.data.len() {
-            self.data[i] *= NumCast::from(-1).unwrap();
-        }
-        // return modified left timeseries
-        self
-    }
+	fn neg(self) -> &'a mut TimeSeries<D> {
+		// Modify data vector of the left time series
+		for i in 0..self.data.len() {
+			self.data[i] *= NumCast::from(-1).unwrap();
+		}
+		// return modified left timeseries
+		self
+	}
 
 }
 impl<'a, D> Sub<&TimeSeries<D>> for &'a mut TimeSeries<D>
@@ -481,14 +537,14 @@ impl<'a, D> Sub<&TimeSeries<D>> for &'a mut TimeSeries<D>
 	type Output = &'a mut TimeSeries<D>;
 
 	fn sub(self, other: &TimeSeries<D>) -> &'a mut TimeSeries<D> {
-        // verify if the length of the time series are equal
-        assert_eq!(self.data.len(), other.data.len());
-        // Modify data vector of the left time series
-        for i in 0..self.data.len() {
-            self.data[i] -= other.data[i];
-        }
-        // return modified left timeseries
-        self
+		// verify if the length of the time series are equal
+		assert_eq!(self.data.len(), other.data.len());
+		// Modify data vector of the left time series
+		for i in 0..self.data.len() {
+			self.data[i] -= other.data[i];
+		}
+		// return modified left timeseries
+		self
 	}
 }
 impl<'a, D> Sub<D> for &'a mut TimeSeries<D>
@@ -496,42 +552,42 @@ impl<'a, D> Sub<D> for &'a mut TimeSeries<D>
 {
 	type Output = &'a mut TimeSeries<D>;
 
-    fn sub(self, other: D) -> &'a mut TimeSeries<D> {
-        // Modify data vector of the left time series
-        for i in 0..self.data.len() {
-            self.data[i] -= other;
-        }
-        // return modified left timeseries
-        self
-    }
+	fn sub(self, other: D) -> &'a mut TimeSeries<D> {
+		// Modify data vector of the left time series
+		for i in 0..self.data.len() {
+			self.data[i] -= other;
+		}
+		// return modified left timeseries
+		self
+	}
 
 }
 impl<'a> Sub<&'a mut TimeSeries<f32>> for f32 {
 	type Output = &'a mut TimeSeries<f32>;
 	fn sub(self, other: &'a mut TimeSeries<f32>) -> &'a mut TimeSeries<f32> {
-        // return modified left timeseries
-        other.neg().add(self)
+		// return modified left timeseries
+		other.neg().add(self)
 	}
 }
 impl<'a> Sub<&'a mut TimeSeries<f64>> for f64 {
 	type Output = &'a mut TimeSeries<f64>;
 	fn sub(self, other: &'a mut TimeSeries<f64>) -> &'a mut TimeSeries<f64> {
-        // return modified left timeseries
-        other.neg().add(self)
+		// return modified left timeseries
+		other.neg().add(self)
 	}
 }
 impl<'a> Sub<&'a mut TimeSeries<Complex<f32>>> for Complex<f32> {
 	type Output = &'a mut TimeSeries<Complex<f32>>;
 	fn sub(self, other: &'a mut TimeSeries<Complex<f32>>) -> &'a mut TimeSeries<Complex<f32>> {
-        // return modified left timeseries
-        other.neg().add(self)
+		// return modified left timeseries
+		other.neg().add(self)
 	}
 }
 impl<'a> Sub<&'a mut TimeSeries<Complex<f64>>> for Complex<f64> {
 	type Output = &'a mut TimeSeries<Complex<f64>>;
 	fn sub(self, other: &'a mut TimeSeries<Complex<f64>>) -> &'a mut TimeSeries<Complex<f64>> {
-        // return modified left timeseries
-        other.neg().add(self)
+		// return modified left timeseries
+		other.neg().add(self)
 	}
 }
 
@@ -539,57 +595,57 @@ impl<'a> Sub<&'a mut TimeSeries<Complex<f64>>> for Complex<f64> {
 impl<'a, D> Mul<&TimeSeries<D>> for &'a mut TimeSeries<D>
 	where D: MulAssign + ComplexFloat,
 {
-    type Output = &'a mut TimeSeries<D>;
+	type Output = &'a mut TimeSeries<D>;
 
-    fn mul(self, other: &TimeSeries<D>) -> &'a mut TimeSeries<D> {
-        // verify if the length of the time series are equal
-        assert_eq!(self.data.len(), other.data.len());
-        // Modify data vector of the left time series
-        for i in 0..self.data.len() {
-            self.data[i] *= other.data[i];
-        }
-        // return modified left timeseries
-        self
-    }
+	fn mul(self, other: &TimeSeries<D>) -> &'a mut TimeSeries<D> {
+		// verify if the length of the time series are equal
+		assert_eq!(self.data.len(), other.data.len());
+		// Modify data vector of the left time series
+		for i in 0..self.data.len() {
+			self.data[i] *= other.data[i];
+		}
+		// return modified left timeseries
+		self
+	}
 
 }
 impl<'a, D> Mul<D> for &'a mut TimeSeries<D>
 	where D: MulAssign + ComplexFloat,
 {
-    type Output = &'a mut TimeSeries<D>;
+	type Output = &'a mut TimeSeries<D>;
 
-    fn mul(self, other: D) -> &'a mut TimeSeries<D> {
-        // Modify data vector of the left time series
-        for i in 0..self.data.len() {
-            self.data[i] *= other;
-        }
-        // return modified left timeseries
-        self
-    }
+	fn mul(self, other: D) -> &'a mut TimeSeries<D> {
+		// Modify data vector of the left time series
+		for i in 0..self.data.len() {
+			self.data[i] *= other;
+		}
+		// return modified left timeseries
+		self
+	}
 }
 impl<'a> Mul<&'a mut TimeSeries<f32>> for f32 {
-    type Output = &'a mut TimeSeries<f32>;
-    fn mul(self, other: &'a mut TimeSeries<f32>) -> &'a mut TimeSeries<f32> {
-        other.mul(self)
-    }
+	type Output = &'a mut TimeSeries<f32>;
+	fn mul(self, other: &'a mut TimeSeries<f32>) -> &'a mut TimeSeries<f32> {
+		other.mul(self)
+	}
 }
 impl<'a> Mul<&'a mut TimeSeries<f64>> for f64 {
-    type Output = &'a mut TimeSeries<f64>;
-    fn mul(self, other: &'a mut TimeSeries<f64>) -> &'a mut TimeSeries<f64> {
-        other.mul(self)
-    }
+	type Output = &'a mut TimeSeries<f64>;
+	fn mul(self, other: &'a mut TimeSeries<f64>) -> &'a mut TimeSeries<f64> {
+		other.mul(self)
+	}
 }
 impl<'a> Mul<&'a mut TimeSeries<Complex<f32>>> for Complex<f32> {
-    type Output = &'a mut TimeSeries<Complex<f32>>;
-    fn mul(self, other: &'a mut TimeSeries<Complex<f32>>) -> &'a mut TimeSeries<Complex<f32>> {
-        other.mul(self)
-    }
+	type Output = &'a mut TimeSeries<Complex<f32>>;
+	fn mul(self, other: &'a mut TimeSeries<Complex<f32>>) -> &'a mut TimeSeries<Complex<f32>> {
+		other.mul(self)
+	}
 }
 impl<'a> Mul<&'a mut TimeSeries<Complex<f64>>> for Complex<f64> {
-    type Output = &'a mut TimeSeries<Complex<f64>>;
-    fn mul(self, other: &'a mut TimeSeries<Complex<f64>>) -> &'a mut TimeSeries<Complex<f64>> {
-        other.mul(self)
-    }
+	type Output = &'a mut TimeSeries<Complex<f64>>;
+	fn mul(self, other: &'a mut TimeSeries<Complex<f64>>) -> &'a mut TimeSeries<Complex<f64>> {
+		other.mul(self)
+	}
 }
 
 
@@ -601,14 +657,14 @@ impl<'a, D> Div<&TimeSeries<D>> for &'a mut TimeSeries<D>
 
 	fn div(self, other: &TimeSeries<D>) -> &'a mut TimeSeries<D> {
 
-        // verify if the length of the time series are equal
-        assert_eq!(self.data.len(), other.data.len());
-        // Modify data vector of the left time series
-        for i in 0..self.data.len() {
-            self.data[i] /= other.data[i];
-        }
-        // return modified left timeseries
-        self
+		// verify if the length of the time series are equal
+		assert_eq!(self.data.len(), other.data.len());
+		// Modify data vector of the left time series
+		for i in 0..self.data.len() {
+			self.data[i] /= other.data[i];
+		}
+		// return modified left timeseries
+		self
 	}
 }
 impl<'a, D> Div<D> for &'a mut TimeSeries<D> 
@@ -628,35 +684,35 @@ impl<'a, D> Div<D> for &'a mut TimeSeries<D>
 impl<'a> Div<&'a mut TimeSeries<f32>> for f32 {
 	type Output = &'a mut TimeSeries<f32>;
 	fn div(self, other: &'a mut TimeSeries<f32>) -> &'a mut TimeSeries<f32> {
-        // return modified left timeseries
-        other.inv().mul(self)
+		// return modified left timeseries
+		other.inv().mul(self)
 	}
 }
 impl<'a> Div<&'a mut TimeSeries<f64>> for f64 {
 	type Output = &'a mut TimeSeries<f64>;
 	fn div(self, other: &'a mut TimeSeries<f64>) -> &'a mut TimeSeries<f64> {
-        // return modified left timeseries
-        other.inv().mul(self)
+		// return modified left timeseries
+		other.inv().mul(self)
 	}
 }
 impl<'a> Div<&'a mut TimeSeries<Complex<f32>>> for Complex<f32> {
 	type Output = &'a mut TimeSeries<Complex<f32>>;
 	fn div(self, other: &'a mut TimeSeries<Complex<f32>>) -> &'a mut TimeSeries<Complex<f32>> {
-        // return modified left timeseries
-        other.inv().mul(self)
+		// return modified left timeseries
+		other.inv().mul(self)
 	}
 }
 impl<'a> Div<&'a mut TimeSeries<Complex<f64>>> for Complex<f64> {
 	type Output = &'a mut TimeSeries<Complex<f64>>;
 	fn div(self, other: &'a mut TimeSeries<Complex<f64>>) -> &'a mut TimeSeries<Complex<f64>> {
-        // return modified left timeseries
-        other.inv().mul(self)
+		// return modified left timeseries
+		other.inv().mul(self)
 	}
 }
 
 
 /* operator[] ---------------------------------------------------------------------------------- */
-impl<D: ComplexFloat + ComplexFloat> Index<usize> for TimeSeries<D> {
+impl<D: ComplexFloat> Index<usize> for TimeSeries<D> {
 	
 	type Output = D;
 	fn index(&self, i: usize) -> &D {
@@ -665,7 +721,7 @@ impl<D: ComplexFloat + ComplexFloat> Index<usize> for TimeSeries<D> {
 	}
 }
 
-impl<D: ComplexFloat + ComplexFloat> IndexMut<usize> for TimeSeries<D> {
+impl<D: ComplexFloat> IndexMut<usize> for TimeSeries<D> {
 		
 	fn index_mut(&mut self, i: usize) -> &mut D {
 		assert_gt!(self.data.len(), i);

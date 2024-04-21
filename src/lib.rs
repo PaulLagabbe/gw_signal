@@ -72,11 +72,15 @@ impl<D> TimeSeries<D>
 		// initialize fft
 		let mut planner = FftPlanner::new();
 		let fft = planner.plan_fft_forward(window.get_size());
+
+		/*
 		// compute the mean of each time series
 		let mut self_clone = &mut self.clone();
 		self_clone = self_clone - self.mean();
 		let mut other_clone = &mut other.clone();
 		other_clone = other_clone - other.mean();
+		*/
+
 		// initialize frequency series
 		let mut temp_1: Vec<Complex<f64>>;
 		let mut temp_2: Vec<Complex<f64>>;
@@ -87,8 +91,8 @@ impl<D> TimeSeries<D>
 		let nb_fft: usize = window.nb_fft(self.get_size());
 		for i in 0..nb_fft {
 			// compute windowed data
-			temp_1 = window.get_windowed_data(self_clone.get_data(), i);
-			temp_2 = window.get_windowed_data(other_clone.get_data(), i);
+			temp_1 = window.get_windowed_data(self.get_data(), i);
+			temp_2 = window.get_windowed_data(other.get_data(), i);
 			// compute fft
 			fft.process(&mut temp_1); fft.process(&mut temp_2);
 			// compute product
@@ -102,9 +106,7 @@ impl<D> TimeSeries<D>
 					temp_2[0..(window.get_size() / 2 + 1)].to_vec().clone()
 				)
 			);
-
 		}
-
 		output = output / (f_max * window.get_norm_factor() * nb_fft as f64);
 		output.clone()
 
@@ -260,12 +262,13 @@ impl<D> TimeSeries<D>
 		let mut planner = FftPlanner::new();
 		let fft = planner.plan_fft_forward(window.get_size());
 
+		/*
 		// clone the time series and subtract their mean
 		let mut self_clone = &mut self.clone();
 		self_clone = self_clone - self.mean();
 		let mut other_clone = &mut other.clone();
 		other_clone = other_clone - other.mean();
-
+		*/
 		// compute all frequency series and put them into a vector
 		let mut temp_1: Vec<Complex<f64>>;
 		let mut temp_2: Vec<Complex<f64>>;
@@ -277,8 +280,8 @@ impl<D> TimeSeries<D>
 		for i in 0..window.nb_fft(self.get_size()) {
 			temp_series.set_to_zero();
 			// compute windowed data
-			temp_1 = window.get_windowed_data(self_clone.get_data(), i);
-			temp_2 = window.get_windowed_data(other_clone.get_data(), i);
+			temp_1 = window.get_windowed_data(self.get_data(), i);
+			temp_2 = window.get_windowed_data(other.get_data(), i);
 			// compute fft
 			fft.process(&mut temp_1); fft.process(&mut temp_2);
 			// compute product and add result into the frequency series vector
@@ -575,13 +578,11 @@ impl<D: ComplexFloat + ToString + FromStr + Display> SeriesIO for TimeSeries<D> 
 	fn write_csv(&self, file_name: &str) {
 		let mut w = File::create(file_name).unwrap();
 		writeln!(&mut w, "time,value").unwrap();
-		let mut time: f64;
-		let mut i: f64 = 0.;
+		let mut time: f64 = self.get_t0();
         for value in self.get_data().iter() {
             // compute time
-            time = self.get_t0() + i / self.get_fs();
+            time += 1f64 / self.get_fs();
             writeln!(&mut w, "{},{}", time, value.to_string()).unwrap();
-			i += 1.;
         }
 	}
 
@@ -631,13 +632,11 @@ impl SeriesIO for FrequencySeries {
 	fn write_csv(&self, file_name: &str) {
 		let mut w = File::create(file_name).unwrap();
 		writeln!(&mut w, "frequency,value").unwrap();
-		let mut freq: f64;
-		let mut i: f64 = 0.;
+		let mut freq: f64 = 0f64;
         for value in self.get_data().iter() {
             // compute time
-            freq = self.get_f_max() * i / ((self.get_size()-1) as f64);
             writeln!(&mut w, "{},{}", freq, value.to_string()).unwrap();
-			i += 1.;
+            freq += self.get_f_max() / ((self.get_size()-1) as f64);
         }
 	}
 
