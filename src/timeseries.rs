@@ -195,7 +195,7 @@ impl<D: ComplexFloat<Real = F>, F> TimeSeries<D> {
 		self.data.clone()
 	}
 	/// extract a sub time series
-	pub fn get_subts(&self, start: usize, end: usize) -> TimeSeries<D> {
+	pub fn subts(&self, start: usize, end: usize) -> TimeSeries<D> {
 		
 		let t0: f64 = self.t0 + (start as f64 / self.fs);
 		let fs = self.fs;
@@ -279,17 +279,7 @@ impl<D: ComplexFloat<Real = F>, F> TimeSeries<D> {
 			data: output
 		}
 	}
-	/// Compute mean value of the time series
-	pub fn mean(&self) -> D {
-		let mut output: D = D::zero();
-		for value in self.data.iter() {
-			output = output + *value;
-		}
-		output = output / D::from(self.get_size()).unwrap();
-		output
-	}
 }
-
 /// Math functions for real time series
 impl<D: Float> TimeSeries<D> {
 	/// Get the maximum value of the time series
@@ -314,13 +304,51 @@ impl<D: Float> TimeSeries<D> {
 		}
 		output
 	}
+}
 
+/// statistical function
+impl<D: ComplexFloat<Real = F>, F: Float> TimeSeries<D> {
+	/// Computes mean value of the time series
+	pub fn mean(&self) -> D {
+		let mut output: D = D::zero();
+		for value in self.data.iter() {
+			output = output + *value;
+		}
+		output = output / D::from(self.get_size()).unwrap();
+		output
+	}
+	/// Computes the covariance between the time series and another one
+	pub fn cov(&self, other: &TimeSeries<D>) -> D {
+		let mut output: D = D::zero();
+		let mean_value: D = self.mean();
+		for it in self.data.iter().zip(other.get_data().iter()) {
+			output = output + (*it.0 - mean_value) * (*it.1 - mean_value).conj();
+		}
+		output = output / D::from(self.get_size()).unwrap();
+		output
+	}
+	/// Computes the variance of the time series
+	pub fn var(&self) -> D {
+		let other = self.clone();
+		self.cov(&other)
+	}
+	/// Computes the standard deviation of the time series
+	pub fn std(&self) -> D {
+		self.var().sqrt()
+	}
+	/// Computes the correlation between two signals
+	pub fn correlation(&self, other: &TimeSeries<D>) -> D {
+		let covariance: D = self.cov(other);
+		let variance_1: D = self.var();
+		let variance_2: D = other.var();
+		covariance / variance_1 / variance_2
+	}
 }
 
 
 
 /* --------------------------------------------------------------------------------------------- */
-/// Transform the data type into another
+/// Clone timeseries with another data type
 pub trait ToType {
 	/// Transform time series into a time series of f32. Copy the data vector
 	/// If the initial time series is complex, takes the real part of the data

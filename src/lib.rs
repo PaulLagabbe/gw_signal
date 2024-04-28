@@ -441,9 +441,9 @@ impl<D> TimeSeries<D>
 
 /* --------------------------------------------------------------------------------------------- */
 
-/// Implement signal filtering
+/// Signal processing methods
 impl<D> TimeSeries<D> 
-	where D: ComplexFloat + AddAssign + SubAssign + MulAssign + DivAssign,
+	where D: ComplexFloat,
 {
 
 	/// The following method apply an IIR filter to a time series
@@ -457,13 +457,13 @@ impl<D> TimeSeries<D>
 	///
 	/// // creates two white noise signals
 	/// let fs: f64 = 1e3;
-	/// let mut signal_1: TimeSeries = TimeSeries::white_noise(20000, f64, 1.);
+	/// let mut signal_1: TimeSeries<f64> = TimeSeries::white_noise(20000, fs, 0., 1.);
 	/// 
 	/// // generates an 8th butterworth lowpass filter at 10 Hz
-	/// let butter: Filter::butterworth(8, BType::LowType(10.), fs);
+	/// let butter: Filter::butterworth(8, BType::LowPass(10.), fs);
 	/// 
 	/// // apply the filter to the signal
-	/// let mut signal_2: TimeSeries = signal_1.apply_filter(butter);
+	/// let mut signal_2: TimeSeries = signal_1.apply_filter(&butter);
 	///
 	/// ```
 	pub fn apply_filter(&mut self, input_filter: &Filter) {
@@ -493,18 +493,86 @@ impl<D> TimeSeries<D>
 		let mut y: Vec<D> = x.clone();
 
 		for i in 0..self.get_size() {
+			// computed y signal value
 			let mut temp_y: D = D::zero();
 			for j in 0..b.len() {
-				temp_y += x[i + b.len()-1 - j] * D::from(b[j]).unwrap();
+				temp_y = temp_y + x[i + b.len()-1 - j] * D::from(b[j]).unwrap();
 			}
 			for j in 1..a.len() {
-				temp_y -= y[i + a.len()-1 - j] * D::from(a[j]).unwrap();
+				temp_y = temp_y - y[i + a.len()-1 - j] * D::from(a[j]).unwrap();
 			}
-			temp_y /= D::from(a[0]).unwrap();
+			temp_y = temp_y / D::from(a[0]).unwrap();
+			// apply computed value
 			self[i] = temp_y;
 			y[i+a.len()-1] = temp_y;
 		}
+	}
 
+
+	/// Computes the convolution product of two signals using the fft methods
+	/// # Example	
+	/// ```
+	/// use gw_signal::{
+	/// 	timeseries::*,
+	/// };
+	///
+	/// // creates two white noise signals
+	/// let fs: f64 = 1e3;
+	/// let signal_1: TimeSeries<f64> = TimeSeries::white_noise(20000, fs, 0., 1.);
+	/// let signal_2: TimeSeries<f64> = TimeSeries::white_noise(10000, fs, 0., 1.);
+	/// 
+	/// // computes convolution
+	/// let signal: TimeSeries<f64> = signal_1.convolution(&signal_2);
+	/// 
+	/// ```
+	pub fn convolution(&self, other: &TimeSeries<D>) -> TimeSeries<D> {
+		
+		// test if the sampling frequencies of the two time series are the same
+		assert_eq!(self.get_fs(), other.get_fs());
+		let fs: f64 = self.get_fs();
+		let t0: f64 = 0.; // starting time set to 0
+		// clone data vectors with complex data type
+		let complex_self = self.to_c64();
+		let complex_other = other.to_c64();
+
+		// zero padding the data vectors
+		let mut x: Vec<Complex<f64>> = complex_self.get_data();
+		x.append(&mut vec![Complex{re: 0., im: 0.}; other.get_size()-1]);
+		let mut y: Vec<Complex<f64>> = complex_other.get_data();
+		y.append(&mut vec![Complex{re: 0., im: 0.}; self.get_size()-1]);
+		let n: usize = x.len();
+
+		// computes the fft
+		let mut planner = FftPlanner::new();
+		let fft = planner.plan_fft_forward(x.len());
+		fft.process(&mut x); fft.process(&mut y);
+
+		// multply the fft
+		for it in y.iter().zip(x.iter_mut()) {
+			*it.1 *= *it.0 / Complex{re: n as f64, im: 0.};
+		}
+
+		// computes the inverse fft
+		planner = FftPlanner::new();
+		let ifft = planner.plan_fft_inverse(x.len());
+		ifft.process(&mut x);
+		// test if the data value is complex or not
+		let mut sum: Complex<f64> = Complex::from(0f64);
+		for val in x.iter() {
+			sum = sum + *val;
+		}
+		// convert data into data type
+		let mut data: Vec<D> = Vec::new();
+		for val in x.iter() {
+			if sum.im().abs() < sum.re().abs() * 1e-10 {
+				data.push(D::from((*val).re).unwrap());
+			} else {
+				data.push(D::from(*val).unwrap());
+			}
+		}
+
+		// create data vector
+		TimeSeries::from_vector(fs, t0, data)
 	}
 }
 
@@ -532,7 +600,7 @@ pub trait SeriesIO {
 	/// signal.print(0, 10);
 	///
 	/// ```
-    fn print(&self, n1: usize, n2: usize);
+	fn print(&self, n1: usize, n2: usize);
 
 	/// # Example	
 	/// ```
@@ -565,25 +633,25 @@ pub trait SeriesIO {
 
 
 impl<D: ComplexFloat + ToString + FromStr + Display> SeriesIO for TimeSeries<D> {
-    
+	
 	fn print(&self, n1: usize, n2: usize) {
-		let mut time: f64;         
+		let mut time: f64;		 
 		for i in n1..n2 {
-            // compute time
-            time = self.get_t0() + (i as f64) / self.get_fs();
-            println!("t = {:.3} s: {:.6}", time, self[i]);
-        }
-    }
+			// compute time
+			time = self.get_t0() + (i as f64) / self.get_fs();
+			println!("t = {:.3} s: {:.6}", time, self[i]);
+		}
+	}
 
 	fn write_csv(&self, file_name: &str) {
 		let mut w = File::create(file_name).unwrap();
 		writeln!(&mut w, "time,value").unwrap();
 		let mut time: f64 = self.get_t0();
-        for value in self.get_data().iter() {
-            // compute time
-            time += 1f64 / self.get_fs();
-            writeln!(&mut w, "{},{}", time, value.to_string()).unwrap();
-        }
+		for value in self.get_data().iter() {
+			// compute time
+			time += 1f64 / self.get_fs();
+			writeln!(&mut w, "{},{}", time, value.to_string()).unwrap();
+		}
 	}
 
 	fn read_csv(file_name: &str) -> Self {
@@ -619,25 +687,25 @@ impl<D: ComplexFloat + ToString + FromStr + Display> SeriesIO for TimeSeries<D> 
 
 
 impl SeriesIO for FrequencySeries {
-    
+	
 	fn print(&self, n1: usize, n2: usize) {
-        let mut freq: f64;
-        for i in n1..n2 {
-            // compute time
-            freq = self.get_f_max() * (i as f64) / ((self.get_size()-1) as f64);
-            println!("f = {:.3} Hz: {:.6} + {:.6}i", freq, self[i].re, self[i].im);
-        }
-    }
+		let mut freq: f64;
+		for i in n1..n2 {
+			// compute time
+			freq = self.get_f_max() * (i as f64) / ((self.get_size()-1) as f64);
+			println!("f = {:.3} Hz: {:.6} + {:.6}i", freq, self[i].re, self[i].im);
+		}
+	}
 	
 	fn write_csv(&self, file_name: &str) {
 		let mut w = File::create(file_name).unwrap();
 		writeln!(&mut w, "frequency,value").unwrap();
 		let mut freq: f64 = 0f64;
-        for value in self.get_data().iter() {
-            // compute time
-            writeln!(&mut w, "{},{}", freq, value.to_string()).unwrap();
-            freq += self.get_f_max() / ((self.get_size()-1) as f64);
-        }
+		for value in self.get_data().iter() {
+			// compute time
+			writeln!(&mut w, "{},{}", freq, value.to_string()).unwrap();
+			freq += self.get_f_max() / ((self.get_size()-1) as f64);
+		}
 	}
 
 	fn read_csv(file_name: &str) -> Self {
@@ -674,11 +742,11 @@ impl SeriesIO for Spectrogram {
 		let frequency_series = &self[0];
 		let mut freq: f64;
 		for i in n1..n2 {
-            // compute time
-            freq = self.get_f_max() * (i as f64) / ((self.get_size().1-1) as f64);
-            println!("f = {:.3} Hz: {:.6} + {:.6}i",
+			// compute time
+			freq = self.get_f_max() * (i as f64) / ((self.get_size().1-1) as f64);
+			println!("f = {:.3} Hz: {:.6} + {:.6}i",
 				freq, frequency_series[i].re, frequency_series[i].im);
-        }
+		}
 	}
 
 	fn write_csv(&self, file_name: &str) {
@@ -699,17 +767,17 @@ impl SeriesIO for Spectrogram {
 		writeln!(&mut w, "{}", line).unwrap();
 		// write data vector
 		let mut time: f64 = self.get_t0();
-        for frequency_series in self.get_data().iter() {
-            // compute time
+		for frequency_series in self.get_data().iter() {
+			// compute time
 			line = time.to_string();
 			for value in frequency_series.iter() {
 				line.push_str(",");
 				line.push_str(&value.to_string());
 			}
 			//line.push_str("\n");
-            writeln!(&mut w, "{}", line).unwrap();
-            time += self.get_dt();
-        }
+			writeln!(&mut w, "{}", line).unwrap();
+			time += self.get_dt();
+		}
 	}
 
 	fn read_csv(file_name: &str) -> Self {

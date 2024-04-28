@@ -1,6 +1,6 @@
 [package]
 name = "gw_signal"
-version = "0.1.10-alpha.1"
+version = "0.1.10-alpha.2"
 edition = "2021"
 description = "Package with signal processing tools for graviational waves studies"
 license = "Apache-2.0"
